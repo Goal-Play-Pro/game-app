@@ -1,0 +1,170 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    screens: {
+      'xs': '320px',
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1536px',
+      // Custom breakpoints for specific devices
+      'mobile': {'max': '767px'},
+      'tablet': {'min': '768px', 'max': '1023px'},
+      'laptop': {'min': '1024px', 'max': '1439px'},
+      'desktop': {'min': '1440px'},
+      // Orientation-based breakpoints
+      'portrait': {'raw': '(orientation: portrait)'},
+      'landscape': {'raw': '(orientation: landscape)'},
+      // Height-based breakpoints
+      'short': {'raw': '(max-height: 600px)'},
+      'tall': {'raw': '(min-height: 800px)'},
+    },
+    extend: {
+      fontFamily: {
+        'sans': ['Inter', 'system-ui', 'sans-serif'],
+        'display': ['Orbitron', 'system-ui', 'sans-serif'],
+      },
+      fontSize: {
+        'xs': ['0.75rem', { lineHeight: '1rem' }],
+        'sm': ['0.875rem', { lineHeight: '1.25rem' }],
+        'base': ['1rem', { lineHeight: '1.5rem' }],
+        'lg': ['1.125rem', { lineHeight: '1.75rem' }],
+        'xl': ['1.25rem', { lineHeight: '1.75rem' }],
+        '2xl': ['1.5rem', { lineHeight: '2rem' }],
+        '3xl': ['1.875rem', { lineHeight: '2.25rem' }],
+        '4xl': ['2.25rem', { lineHeight: '2.5rem' }],
+        '5xl': ['3rem', { lineHeight: '1' }],
+        '6xl': ['3.75rem', { lineHeight: '1' }],
+        '7xl': ['4.5rem', { lineHeight: '1' }],
+        '8xl': ['6rem', { lineHeight: '1' }],
+        '9xl': ['8rem', { lineHeight: '1' }],
+        // Responsive font sizes
+        'responsive-xs': 'clamp(0.75rem, 2.5vw, 0.875rem)',
+        'responsive-sm': 'clamp(0.875rem, 3vw, 1rem)',
+        'responsive-base': 'clamp(1rem, 3.5vw, 1.125rem)',
+        'responsive-lg': 'clamp(1.125rem, 4vw, 1.5rem)',
+        'responsive-xl': 'clamp(1.25rem, 5vw, 2rem)',
+        'responsive-2xl': 'clamp(1.5rem, 6vw, 2.5rem)',
+        'responsive-3xl': 'clamp(1.875rem, 7vw, 3.5rem)',
+        'responsive-4xl': 'clamp(2.25rem, 8vw, 4.5rem)',
+        'responsive-5xl': 'clamp(3rem, 10vw, 6rem)',
+      },
+      spacing: {
+        '18': '4.5rem',
+        '88': '22rem',
+        '128': '32rem',
+        '144': '36rem',
+        // Responsive spacing
+        'responsive-xs': 'clamp(0.25rem, 1vw, 0.5rem)',
+        'responsive-sm': 'clamp(0.5rem, 2vw, 1rem)',
+        'responsive-md': 'clamp(1rem, 3vw, 1.5rem)',
+        'responsive-lg': 'clamp(1.5rem, 4vw, 2rem)',
+        'responsive-xl': 'clamp(2rem, 5vw, 3rem)',
+      },
+      maxWidth: {
+        'xs': '20rem',
+        'responsive-sm': 'min(90vw, 28rem)',
+        'responsive-md': 'min(90vw, 42rem)',
+        'responsive-lg': 'min(90vw, 56rem)',
+        'responsive-xl': 'min(90vw, 72rem)',
+        'responsive-2xl': 'min(95vw, 96rem)',
+      },
+      minHeight: {
+        'screen-safe': 'calc(100vh - 4rem)',
+        'screen-mobile': 'calc(100vh - 3.5rem)',
+        'screen-tablet': 'calc(100vh - 4rem)',
+        'screen-desktop': 'calc(100vh - 5rem)',
+      },
+      colors: {
+        primary: {
+          50: '#f0f9ff',
+          100: '#e0f2fe',
+          200: '#bae6fd',
+          300: '#7dd3fc',
+          400: '#38bdf8',
+          500: '#0ea5e9',
+          600: '#0284c7',
+          700: '#0369a1',
+          800: '#075985',
+          900: '#0c4a6e',
+        },
+        football: {
+          green: '#00b894',
+          blue: '#0984e3',
+          orange: '#e17055',
+          purple: '#6c5ce7',
+          yellow: '#fdcb6e',
+        },
+        dark: {
+          100: '#1e1b4b',
+          200: '#1e1e2e',
+          300: '#181825',
+          400: '#11111b',
+          500: '#0d0d0d',
+        }
+      },
+      aspectRatio: {
+        'responsive-square': '1',
+        'responsive-video': '16 / 9',
+        'responsive-mobile': '4 / 3',
+        'responsive-portrait': '3 / 4',
+      },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+        'football-gradient': 'linear-gradient(135deg, #00b894 0%, #0984e3 100%)',
+        'game-gradient': 'linear-gradient(45deg, #00b894, #0984e3, #6c5ce7)',
+        'mobile-gradient': 'linear-gradient(180deg, #00b894 0%, #0984e3 100%)',
+      },
+      animation: {
+        'float': 'float 6s ease-in-out infinite',
+        'float-mobile': 'float-mobile 4s ease-in-out infinite',
+        'glow': 'glow 2s ease-in-out infinite alternate',
+        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'bounce-slow': 'bounce 3s infinite',
+        'spin-slow': 'spin 3s linear infinite',
+        'gradient-shift': 'gradient-shift 3s ease infinite',
+      },
+      keyframes: {
+        float: {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-20px)' },
+        },
+        'float-mobile': {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-10px)' },
+        },
+        glow: {
+          '0%': { boxShadow: '0 0 5px #00b894, 0 0 10px #00b894, 0 0 15px #00b894' },
+          '100%': { boxShadow: '0 0 10px #00b894, 0 0 20px #00b894, 0 0 30px #00b894' },
+        },
+        'gradient-shift': {
+          '0%, 100%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
+        },
+      },
+      backdropBlur: {
+        xs: '2px',
+      },
+      transitionDuration: {
+        '400': '400ms',
+        '600': '600ms',
+        '800': '800ms',
+        '900': '900ms',
+      },
+      zIndex: {
+        '60': '60',
+        '70': '70',
+        '80': '80',
+        '90': '90',
+        '100': '100',
+      },
+    },
+  },
+  plugins: [],
+}

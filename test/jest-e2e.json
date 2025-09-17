@@ -1,0 +1,20 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".e2e-spec.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapping": {
+    "^@common/(.*)$": "<rootDir>/../src/common/$1",
+    "^@auth/(.*)$": "<rootDir>/../src/modules/auth/$1",
+    "^@wallet/(.*)$": "<rootDir>/../src/modules/wallet/$1",
+    "^@shop/(.*)$": "<rootDir>/../src/modules/shop/$1",
+    "^@order/(.*)$": "<rootDir>/../src/modules/order/$1",
+    "^@gacha/(.*)$": "<rootDir>/../src/modules/gacha/$1",
+    "^@inventory/(.*)$": "<rootDir>/../src/modules/inventory/$1",
+    "^@penalty/(.*)$": "<rootDir>/../src/modules/penalty/$1",
+    "^@ledger/(.*)$": "<rootDir>/../src/modules/ledger/$1"
+  }
+}
