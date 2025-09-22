@@ -24,7 +24,7 @@ export class GachaDraw {
   @Column()
   seed: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamptz' })
   drawDate: Date;
 
   @CreateDateColumn()

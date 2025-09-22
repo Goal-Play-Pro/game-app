@@ -22,7 +22,7 @@ export class ReferralRegistration {
   @Column()
   referralCode: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamptz' })
   registeredAt: Date;
 
   @Column({ default: true })

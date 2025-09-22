@@ -23,7 +23,7 @@ export class OwnedPlayer {
   @Column({ nullable: true })
   sourceDrawId: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamptz' })
   acquiredAt: Date;
 
   @Column({ default: 1 })

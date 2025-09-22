@@ -35,7 +35,7 @@ export class ReferralCommission {
   @Column({ default: 'pending' })
   status: string;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   paidAt: Date;
 
   @CreateDateColumn()

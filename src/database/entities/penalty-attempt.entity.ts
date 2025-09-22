@@ -36,7 +36,7 @@ export class PenaltyAttempt {
   @Column()
   isGoal: boolean;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamptz' })
   attemptedAt: Date;
 
   @Column()

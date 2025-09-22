@@ -44,16 +44,16 @@ export class Order {
   @Column({ nullable: true })
   confirmations: number;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamptz' })
   expiresAt: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   paidAt: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   fulfilledAt: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   cancelledAt: Date;
 
   @Column({ type: 'text', nullable: true })

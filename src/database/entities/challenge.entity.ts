@@ -17,7 +17,7 @@ export class Challenge {
   @Column({ type: 'text' })
   message: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamptz' })
   expiresAt: Date;
 
   @Column({ default: false })

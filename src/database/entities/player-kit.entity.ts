@@ -27,10 +27,10 @@ export class PlayerKit {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   equippedAt: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   unequippedAt: Date;
 
   @CreateDateColumn()

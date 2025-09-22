@@ -20,7 +20,7 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   lastLogin: Date;
 
   @Column({ type: 'text', nullable: true })

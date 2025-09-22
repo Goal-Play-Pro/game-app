@@ -44,10 +44,10 @@ export class PenaltySession {
   @Column()
   seed: string;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   startedAt: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   completedAt: Date;
 
   @CreateDateColumn()

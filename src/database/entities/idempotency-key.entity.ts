@@ -14,7 +14,7 @@ export class IdempotencyKey {
   @Column({ type: 'text' })
   response: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamptz' })
   expiresAt: Date;
 
   @CreateDateColumn()

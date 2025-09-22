@@ -21,10 +21,10 @@ export class Wallet {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamptz' })
   linkedAt: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   lastUsedAt: Date;
 
   @CreateDateColumn()
