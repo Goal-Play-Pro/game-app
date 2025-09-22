@@ -1,131 +1,105 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { DataAdapterService } from '../../common/services/data-adapter.service';
-import { LedgerEntry, Account, ReferenceType } from './entities/ledger.entity';
-import { TransactionType } from '../../common/types/base.types';
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { LedgerEntry } from '../../database/entities/ledger-entry.entity';
+import { Account } from '../../database/entities/account.entity';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class LedgerService {
-  constructor(private dataAdapter: DataAdapterService) {}
+  private readonly logger = new Logger(LedgerService.name);
 
-  async createDoubleEntry(
+  constructor(
+    @InjectRepository(LedgerEntry)
+    private ledgerRepository: Repository<LedgerEntry>,
+    @InjectRepository(Account)
+    private accountRepository: Repository<Account>,
+  ) {}
+
+  async recordTransaction(
     userId: string,
-    debitAccount: string,
-    creditAccount: string,
-    amount: string,
-    currency: string,
-    description: string,
-    referenceType: ReferenceType,
+    referenceType: string,
     referenceId: string,
-    metadata?: Record<string, any>,
-  ): Promise<{ debitEntry: LedgerEntry; creditEntry: LedgerEntry }> {
-    const transactionId = Math.random().toString(36).substr(2, 9);
-    const decimalAmount = parseFloat(amount);
-
-    if (decimalAmount <= 0) {
-      throw new BadRequestException('Amount must be positive');
-    }
-
-    // Get current balances
-    const debitAccountBalance = await this.getAccountBalance(userId, debitAccount, currency);
-    const creditAccountBalance = await this.getAccountBalance(userId, creditAccount, currency);
-
-    // Create debit entry
-    const debitEntry = await this.dataAdapter.create('ledger', {
-      userId,
-      transactionId,
-      account: debitAccount,
-      type: TransactionType.DEBIT,
-      amount: decimalAmount.toString(),
-      currency,
-      description,
-      referenceType,
-      referenceId,
-      balanceAfter: (debitAccountBalance - decimalAmount).toString(),
-      metadata,
-    });
-
-    // Create credit entry
-    const creditEntry = await this.dataAdapter.create('ledger', {
-      userId,
-      transactionId,
-      account: creditAccount,
-      type: TransactionType.CREDIT,
-      amount: decimalAmount.toString(),
-      currency,
-      description,
-      referenceType,
-      referenceId,
-      balanceAfter: (creditAccountBalance + decimalAmount).toString(),
-      metadata,
-    });
-
-    return { debitEntry, creditEntry };
-  }
-
-  async getAccountBalance(userId: string, account: string, currency: string): Promise<number> {
-    const entries = await this.dataAdapter.findWhere('ledger',
-      (e: LedgerEntry) => e.userId === userId && e.account === account && e.currency === currency
-    );
-
-    if (entries.length === 0) {
-      return 0;
-    }
-
-    // Get the most recent entry for this account
-    const latestEntry = entries.sort(
-      (a: LedgerEntry, b: LedgerEntry) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )[0];
-
-    return parseFloat(latestEntry.balanceAfter);
-  }
-
-  async getUserTransactions(
-    userId: string,
-    account?: string,
-    referenceType?: string,
-  ): Promise<LedgerEntry[]> {
-    return this.dataAdapter.findWhere('ledger', (e: LedgerEntry) => {
-      if (e.userId !== userId) return false;
-      if (account && e.account !== account) return false;
-      if (referenceType && e.referenceType !== referenceType) return false;
-      return true;
-    });
-  }
-
-  async recordPurchase(
-    userId: string,
-    orderId: string,
-    amount: string,
+    amount: number,
     currency: string,
-  ): Promise<void> {
-    await this.createDoubleEntry(
-      userId,
-      'user_wallet',
-      'platform_revenue',
-      amount,
-      currency,
-      'Character pack purchase',
-      'order',
-      orderId,
-    );
+    type: 'debit' | 'credit',
+    description: string,
+    account: string = 'user_wallet'
+  ) {
+    const transactionId = uuidv4();
+
+    try {
+      // Get or create account
+      let userAccount = await this.accountRepository.findOne({
+        where: { userId, name: account, currency }
+      });
+
+      if (!userAccount) {
+        userAccount = await this.accountRepository.save({
+          userId,
+          name: account,
+          type: 'asset',
+          currency,
+          balance: '0',
+          isActive: true,
+        });
+      }
+
+      // Calculate new balance
+      const currentBalance = parseFloat(userAccount.balance);
+      const newBalance = type === 'credit' 
+        ? currentBalance + amount 
+        : currentBalance - amount;
+
+      // Create ledger entry
+      const ledgerEntry = await this.ledgerRepository.save({
+        userId,
+        transactionId,
+        account,
+        type: type,
+        amount: amount.toString(),
+        currency,
+        description,
+        referenceType,
+        referenceId,
+        balanceAfter: newBalance.toString(),
+      });
+
+      // Update account balance
+      await this.accountRepository.update(userAccount.id, {
+        balance: newBalance.toString(),
+      });
+
+      this.logger.log(`💰 Transaction recorded: ${type} ${amount} ${currency} for user ${userId}`);
+      return ledgerEntry;
+
+    } catch (error) {
+      this.logger.error(`❌ Error recording transaction:`, error);
+      throw error;
+    }
   }
 
-  async recordRefund(
-    userId: string,
-    orderId: string,
-    amount: string,
-    currency: string,
-    reason: string,
-  ): Promise<void> {
-    await this.createDoubleEntry(
-      userId,
-      'platform_revenue',
-      'user_wallet',
-      amount,
+  async getUserBalance(userId: string, currency: string = 'USDT', account: string = 'user_wallet') {
+    const userAccount = await this.accountRepository.findOne({
+      where: { userId, name: account, currency }
+    });
+
+    return {
+      balance: userAccount?.balance || '0',
       currency,
-      `Refund: ${reason}`,
-      'refund',
-      orderId,
-    );
+      account,
+    };
+  }
+
+  async getUserTransactions(userId: string, limit: number = 50, account?: string, currency?: string) {
+    const where: any = { userId };
+    if (account) where.account = account;
+    if (currency) where.currency = currency;
+
+    return this.ledgerRepository.find({
+      where,
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
   }
 }

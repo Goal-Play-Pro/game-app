@@ -19,6 +19,7 @@ import ApiService from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ReferralDashboard from '../components/referral/ReferralDashboard';
 import WalletManager from '../components/wallet/WalletManager';
+import { CompleteUserProfile } from '../services/api';
 
 const ProfilePage = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'referrals' | 'wallets' | 'history' | 'settings'>('overview');
@@ -40,9 +41,9 @@ const ProfilePage = () => {
   };
 
   // Fetch comprehensive user data
-  const { data: completeProfile, isLoading: profileLoading } = useQuery({
+  const { data: completeProfile, isLoading: profileLoading } = useQuery<CompleteUserProfile>({
     queryKey: ['complete-user-profile'],
-    queryFn: ApiService.getCompleteUserProfile,
+    queryFn: () => ApiService.getCompleteUserProfile(),
     refetchInterval: 30000,
   });
 
@@ -182,7 +183,7 @@ const ProfilePage = () => {
                   {userWallets && userWallets.length > 1 && (
                     <div className="mb-4">
                       <span className="text-sm text-gray-400">
-                        {userWallets.length} wallets connected
+                        ${completeProfile?.referralStats?.totalCommissions || '0.00'}
                       </span>
                     </div>
                   )}
@@ -282,7 +283,7 @@ const ProfilePage = () => {
               
               <div className="glass-dark rounded-xl p-4 text-center">
                 <div className="text-2xl font-bold text-white mb-1">
-                  {completeProfile.transactions?.length || 0}
+                  {completeProfile?.transactions?.length || 0}
                 </div>
                 <div className="text-sm text-gray-400">Transactions</div>
               </div>
@@ -480,7 +481,7 @@ const ProfilePage = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-400">Total Spent:</span>
                       <span className="text-white font-semibold">
-                        ${(completeProfile?.totalSpent || totalSpent).toFixed(2)}
+                        ${((completeProfile?.totalSpent || totalSpent) || 0).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -490,14 +491,14 @@ const ProfilePage = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-400">Net Profit:</span>
                       <span className="text-green-400 font-semibold">
-                        +${(1250 - (completeProfile?.totalSpent || totalSpent)).toFixed(2)}
+                        +${(1250 - ((completeProfile?.totalSpent || totalSpent) || 0)).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Best Day:</span>
                       <span className="text-white font-semibold">$85.00</span>
                     </div>
-                    {completeProfile?.referralStats && (
+                    {completeProfile?.referralStats?.totalCommissions && (
                       <div className="flex justify-between">
                         <span className="text-gray-400">Referral Earnings:</span>
                         <span className="text-football-green font-semibold">

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Target, Users, Zap, Trophy, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Target, Users, Zap, Trophy, ArrowLeft, ArrowRight, Star } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ApiService from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -23,6 +23,8 @@ const GamePage = () => {
   const { data: ownedPlayers, isLoading: playersLoading } = useQuery({
     queryKey: ['owned-players'],
     queryFn: ApiService.getOwnedPlayers,
+    retry: 1,
+    retryDelay: 1000,
   });
 
   // Fetch active sessions
@@ -30,6 +32,8 @@ const GamePage = () => {
     queryKey: ['penalty-sessions'],
     queryFn: ApiService.getUserSessions,
     refetchInterval: 5000, // Refetch every 5 seconds for real-time updates
+    retry: 1,
+    retryDelay: 1000,
   });
 
   // Fetch farming status for selected player
@@ -328,6 +332,11 @@ const GamePage = () => {
                   <p className="text-gray-400 mb-4">{farmingStatus.reason}</p>
                   <div className="text-sm text-yellow-400">
                     Training Progress: {farmingStatus.farmingProgress}%
+                  </div>
+                  <div className="mt-4">
+                    <a href="/inventory" className="btn-primary">
+                      Go to Training
+                    </a>
                   </div>
                 </motion.div>
               )}

@@ -1,15 +1,7 @@
-import { Controller, Get, Put, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Put, Post, Param, Body, UseGuards, Request, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { InventoryService } from './inventory.service';
-import { 
-  OwnedPlayerDto, 
-  PlayerKitDto, 
-  UpdatePlayerKitDto, 
-  PlayerProgressionDto,
-  FarmingSessionDto,
-  FarmingResultDto
-} from './dto/inventory.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('inventory')
 @Controller('owned-players')
@@ -20,72 +12,43 @@ export class InventoryController {
 
   @Get()
   @ApiOperation({ summary: 'Get user owned players' })
-  @ApiResponse({ status: 200, description: 'Players retrieved', type: [OwnedPlayerDto] })
-  async getOwnedPlayers(@Request() req: any): Promise<OwnedPlayerDto[]> {
-    return this.inventoryService.getUserPlayers(req.user.userId);
+  @ApiResponse({ status: HttpStatus.OK, description: 'Owned players retrieved successfully' })
+  async getOwnedPlayers(@Request() req: any) {
+    return this.inventoryService.getOwnedPlayers(req.user.sub);
   }
 
   @Get(':id/kit')
   @ApiOperation({ summary: 'Get player kit' })
-  @ApiResponse({ status: 200, description: 'Kit retrieved', type: PlayerKitDto })
-  async getPlayerKit(@Request() req: any, @Param('id') id: string): Promise<PlayerKitDto> {
-    return this.inventoryService.getPlayerKit(id, req.user.userId);
+  @ApiResponse({ status: HttpStatus.OK, description: 'Player kit retrieved successfully' })
+  async getPlayerKit(@Param('id') id: string, @Request() req: any) {
+    return this.inventoryService.getPlayerKit(id, req.user.sub);
   }
 
   @Put(':id/kit')
   @ApiOperation({ summary: 'Update player kit' })
-  @ApiResponse({ status: 200, description: 'Kit updated', type: PlayerKitDto })
-  async updatePlayerKit(
-    @Request() req: any,
-    @Param('id') id: string,
-    @Body() dto: UpdatePlayerKitDto,
-  ): Promise<PlayerKitDto> {
-    return this.inventoryService.updatePlayerKit(id, req.user.userId, dto);
+  @ApiResponse({ status: HttpStatus.OK, description: 'Player kit updated successfully' })
+  async updatePlayerKit(@Param('id') id: string, @Body() kitData: any, @Request() req: any) {
+    return this.inventoryService.updatePlayerKit(id, kitData, req.user.sub);
   }
 
   @Get(':id/progression')
   @ApiOperation({ summary: 'Get player progression and stats' })
-  @ApiResponse({ status: 200, description: 'Progression retrieved', type: PlayerProgressionDto })
-  async getPlayerProgression(@Request() req: any, @Param('id') id: string): Promise<PlayerProgressionDto> {
-    return this.inventoryService.getPlayerProgression(id, req.user.userId);
-  }
-
-  @Post(':id/farming')
-  @ApiOperation({ summary: 'Process farming session for player' })
-  @ApiResponse({ status: 200, description: 'Farming session completed', type: FarmingResultDto })
-  async processFarmingSession(
-    @Request() req: any,
-    @Param('id') id: string,
-    @Body() dto: FarmingSessionDto,
-  ): Promise<FarmingResultDto> {
-    return this.inventoryService.processFarmingSession(id, req.user.userId, dto.farmingType);
+  @ApiResponse({ status: HttpStatus.OK, description: 'Player progression retrieved successfully' })
+  async getPlayerProgression(@Param('id') id: string, @Request() req: any) {
+    return this.inventoryService.getPlayerProgression(id, req.user.sub);
   }
 
   @Get(':id/farming-status')
-  @ApiOperation({ summary: 'Check if player can participate in games' })
-  @ApiResponse({ status: 200, description: 'Farming status retrieved' })
-  async getFarmingStatus(@Request() req: any, @Param('id') id: string): Promise<{
-    canPlay: boolean;
-    reason?: string;
-    requirements: any;
-    farmingProgress: number;
-  }> {
-    const ownedPlayer = await this.inventoryService.getOwnedPlayerById(id, req.user.userId);
-    
-    const playabilityCheck = PlayerProgressionService.canPlayerPlay(
-      ownedPlayer.currentLevel,
-      ownedPlayer.experience
-    );
+  @ApiOperation({ summary: 'Get player farming status' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Farming status retrieved successfully' })
+  async getFarmingStatus(@Param('id') id: string, @Request() req: any) {
+    return this.inventoryService.getFarmingStatus(id, req.user.sub);
+  }
 
-    const farmingProgress = RealPlayersService.getFarmingProgress(
-      ownedPlayer.currentLevel,
-      ownedPlayer.experience
-    );
-    return {
-      canPlay: playabilityCheck.canPlay,
-      reason: playabilityCheck.reason,
-      requirements: playabilityCheck.requirements,
-      farmingProgress: farmingProgress.progressPercentage
-    };
+  @Post(':id/farming')
+  @ApiOperation({ summary: 'Process farming session' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Farming session processed successfully' })
+  async processFarmingSession(@Param('id') id: string, @Body() farmingData: any, @Request() req: any) {
+    return this.inventoryService.processFarmingSession(id, farmingData.farmingType, req.user.sub);
   }
 }

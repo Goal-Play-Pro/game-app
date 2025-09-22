@@ -38,7 +38,7 @@ const Header = () => {
               whileTap={{ scale: 0.95 }}
             >
               <img
-               src="https://photos.pinksale.finance/file/pinksale-logo-upload/1756665699287-1bb87d41d15fe27b500a4bfcde01bb0e.png"
+               src="https://photos.pinksale.finance/file/pinksale-logo-upload/1756173488726-1bb87d41d15fe27b500a4bfcde01bb0e.png"
                 alt="Gol Play Logo"
                className="h-8 sm:h-10 w-auto object-contain"
                 onError={(e) => {

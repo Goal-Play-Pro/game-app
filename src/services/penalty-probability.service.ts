@@ -1,175 +1,110 @@
 import { Injectable } from '@nestjs/common';
-import { Division } from '../config/division.config';
 import { PlayerStats } from '../types';
 
 /**
- * Servicio de Probabilidad de Penalty - Implementación Robusta
- * Implementa la fórmula canónica exacta solicitada
+ * Penalty Probability Service - Implementación robusta de la fórmula canónica
+ * Calcula probabilidades de penalty basadas en stats de jugador y división
  */
 @Injectable()
 export class PenaltyProbabilityService {
   
   /**
-   * Calcula la probabilidad de anotar gol usando la fórmula canónica
-   * 
-   * Fórmula:
-   * sumSubstats = speed + shooting + passing + defense + goalkeeping
-   * ratio = clamp(sumSubstats / maxStats, 0, 1)
-   * chance = floor(clamp(startingPercentage + (maxPercentage - startingPercentage) * ratio, 5, 95))
-   * 
-   * @param character - Stats del personaje
-   * @param division - División del personaje ('primera', 'segunda', 'tercera')
-   * @returns Probabilidad de gol como entero [5-95]
+   * Configuración de divisiones
+   */
+  private readonly DIVISION_CONFIG = {
+    primera: { startingStats: 95, maxStats: 171, startingPercentage: 50, maxPercentage: 90 },
+    segunda: { startingStats: 76, maxStats: 152, startingPercentage: 40, maxPercentage: 80 },
+    tercera: { startingStats: 57, maxStats: 133, startingPercentage: 30, maxPercentage: 70 }
+  };
+
+  /**
+   * Fórmula canónica para calcular probabilidad de penalty
    */
   computeChance(character: PlayerStats, division: string): number {
-    try {
-      // 1. Obtener configuración de la división
-      const divisionNumber = Division.fromString(division);
-      const divisionObj = new Division(divisionNumber);
-      
-      const startingPercentage = divisionObj.getStartingPercentage();
-      const maxPercentage = divisionObj.getMaxPercentage();
-      const maxStats = divisionObj.getMaxStats();
-      
-      // 2. Calcular suma de substats (sin incluir overall)
-      const sumSubstats = character.speed + character.shooting + character.passing + 
-                         character.defending + character.goalkeeping;
-      
-      // 3. Calcular ratio con clamp [0, 1]
-      const ratio = this.clamp(sumSubstats / maxStats, 0, 1);
-      
-      // 4. Interpolar entre startingPercentage y maxPercentage
-      const interpolatedChance = startingPercentage + (maxPercentage - startingPercentage) * ratio;
-      
-      // 5. Aplicar clamp [5, 95] y floor
-      const finalChance = Math.floor(this.clamp(interpolatedChance, 5, 95));
-      
-      return finalChance;
-      
-    } catch (error) {
-      console.error('Error calculating penalty chance:', error);
-      // Fallback seguro
-      return 50;
-    }
-  }
-  
-  /**
-   * Decide si un penalty es gol usando roll [1..100]
-   * 
-   * @param character - Stats del personaje
-   * @param division - División del personaje
-   * @param rng - Número aleatorio opcional [0-1], si no se proporciona usa Math.random()
-   * @returns true si es gol, false si es fallo
-   */
-  decidePenalty(character: PlayerStats, division: string, rng?: number): boolean {
-    try {
-      // 1. Calcular probabilidad usando fórmula canónica
-      const chance = this.computeChance(character, division);
-      
-      // 2. Generar roll en [1..100]
-      const randomValue = rng !== undefined ? rng : Math.random();
-      const roll = Math.floor(randomValue * 100) + 1; // [1..100]
-      
-      // 3. Decisión: roll ≤ chance = gol
-      const isGoal = roll <= chance;
-      
-      // Log para debugging
-      console.log(`Penalty Decision: chance=${chance}%, roll=${roll}, result=${isGoal ? 'GOAL' : 'MISS'}`);
-      
-      return isGoal;
-      
-    } catch (error) {
-      console.error('Error deciding penalty outcome:', error);
-      // Fallback seguro - 50% chance
-      return Math.random() < 0.5;
-    }
-  }
-  
-  /**
-   * Función de clamp para limitar valores entre min y max
-   */
-  private clamp(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
-  }
-  
-  /**
-   * Valida que las stats de un personaje sumen exactamente startingStats de su división
-   */
-  validateCharacterStatsSum(character: PlayerStats, division: string): boolean {
-    try {
-      const divisionNumber = Division.fromString(division);
-      const divisionObj = new Division(divisionNumber);
-      const expectedSum = divisionObj.getStartingStats();
-      
-      const actualSum = character.speed + character.shooting + character.passing + 
-                       character.defending + character.goalkeeping;
-      
-      return actualSum === expectedSum;
-      
-    } catch (error) {
-      console.error('Error validating character stats sum:', error);
-      return false;
-    }
-  }
-  
-  /**
-   * Valida que las stats progresadas no excedan maxStats de la división
-   */
-  validateProgressionLimits(character: PlayerStats, division: string): boolean {
-    try {
-      const divisionNumber = Division.fromString(division);
-      const divisionObj = new Division(divisionNumber);
-      const maxStats = divisionObj.getMaxStats();
-      
-      const totalStats = character.speed + character.shooting + character.passing + 
-                        character.defending + character.goalkeeping;
-      
-      return totalStats <= maxStats;
-      
-    } catch (error) {
-      console.error('Error validating progression limits:', error);
-      return false;
-    }
-  }
-  
-  /**
-   * Obtiene información detallada del cálculo para debugging
-   */
-  getCalculationDetails(character: PlayerStats, division: string): {
-    sumSubstats: number;
-    ratio: number;
-    startingPercentage: number;
-    maxPercentage: number;
-    maxStats: number;
-    interpolatedChance: number;
-    finalChance: number;
-    isValidSum: boolean;
-    isWithinLimits: boolean;
-  } {
-    const divisionNumber = Division.fromString(division);
-    const divisionObj = new Division(divisionNumber);
+    const config = this.getDivisionConfig(division);
     
-    const startingPercentage = divisionObj.getStartingPercentage();
-    const maxPercentage = divisionObj.getMaxPercentage();
-    const maxStats = divisionObj.getMaxStats();
-    
+    // 1. Suma de substats (sin overall)
     const sumSubstats = character.speed + character.shooting + character.passing + 
                        character.defending + character.goalkeeping;
     
-    const ratio = this.clamp(sumSubstats / maxStats, 0, 1);
-    const interpolatedChance = startingPercentage + (maxPercentage - startingPercentage) * ratio;
+    // 2. Ratio con clamp [0, 1]
+    const ratio = this.clamp(sumSubstats / config.maxStats, 0, 1);
+    
+    // 3. Interpolación entre startingPercentage y maxPercentage
+    const interpolatedChance = config.startingPercentage + 
+                              (config.maxPercentage - config.startingPercentage) * ratio;
+    
+    // 4. Clamp [5, 95] y floor
     const finalChance = Math.floor(this.clamp(interpolatedChance, 5, 95));
     
+    return finalChance;
+  }
+
+  /**
+   * Decisión de penalty basada en RNG
+   */
+  decidePenalty(character: PlayerStats, division: string, rng?: number): boolean {
+    const chance = this.computeChance(character, division);
+    const randomValue = rng !== undefined ? rng : Math.random();
+    const roll = Math.floor(randomValue * 100) + 1; // [1..100]
+    return roll <= chance;
+  }
+
+  /**
+   * Validar que las stats sumen exactamente startingStats
+   */
+  validateCharacterStatsSum(character: PlayerStats, division: string): boolean {
+    const config = this.getDivisionConfig(division);
+    const sumSubstats = character.speed + character.shooting + character.passing + 
+                       character.defending + character.goalkeeping;
+    return sumSubstats === config.startingStats;
+  }
+
+  /**
+   * Validar que las stats no excedan maxStats
+   */
+  validateProgressionLimits(character: PlayerStats, division: string): boolean {
+    const config = this.getDivisionConfig(division);
+    const sumSubstats = character.speed + character.shooting + character.passing + 
+                       character.defending + character.goalkeeping;
+    return sumSubstats <= config.maxStats;
+  }
+
+  /**
+   * Obtener detalles completos del cálculo para debugging
+   */
+  getCalculationDetails(character: PlayerStats, division: string): any {
+    const config = this.getDivisionConfig(division);
+    const sumSubstats = character.speed + character.shooting + character.passing + 
+                       character.defending + character.goalkeeping;
+    const ratio = this.clamp(sumSubstats / config.maxStats, 0, 1);
+    const interpolatedChance = config.startingPercentage + 
+                              (config.maxPercentage - config.startingPercentage) * ratio;
+    const finalChance = Math.floor(this.clamp(interpolatedChance, 5, 95));
+
     return {
       sumSubstats,
       ratio,
-      startingPercentage,
-      maxPercentage,
-      maxStats,
+      startingPercentage: config.startingPercentage,
+      maxPercentage: config.maxPercentage,
+      maxStats: config.maxStats,
       interpolatedChance,
       finalChance,
       isValidSum: this.validateCharacterStatsSum(character, division),
       isWithinLimits: this.validateProgressionLimits(character, division)
     };
+  }
+
+  /**
+   * Utilidades privadas
+   */
+  private getDivisionConfig(division: string) {
+    const normalizedDivision = division.toLowerCase();
+    return this.DIVISION_CONFIG[normalizedDivision as keyof typeof this.DIVISION_CONFIG] || 
+           this.DIVISION_CONFIG.tercera;
+  }
+
+  private clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
   }
 }

@@ -1,10 +1,10 @@
 import { Module, Global } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { MockApiService } from './services/mock-api.service';
-import { DatabaseApiService } from './services/database-api.service';
+import { JwtModule } from '@nestjs/jwt';
 import { DataAdapterService } from './services/data-adapter.service';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { CryptoService } from './services/crypto.service';
+import { LoggerService } from './services/logger.service';
+import { IdempotencyService } from './services/idempotency.service';
 
 @Global()
 @Module({
@@ -12,6 +12,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      expandVariables: true,
     }),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -22,21 +23,18 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
     }),
   ],
   providers: [
-    MockApiService, 
-    DatabaseApiService,
-    JwtAuthGuard,
-    {
-      provide: DataAdapterService,
-      useFactory: (
-        configService: ConfigService,
-        mockApiService: MockApiService,
-        databaseApiService: DatabaseApiService,
-      ) => {
-        return new DataAdapterService(configService, mockApiService, databaseApiService);
-      },
-      inject: [ConfigService, MockApiService, DatabaseApiService],
-    },
+    DataAdapterService,
+    CryptoService,
+    LoggerService,
+    IdempotencyService,
   ],
-  exports: [JwtModule, DataAdapterService, JwtAuthGuard],
+  exports: [
+    ConfigModule,
+    JwtModule,
+    DataAdapterService,
+    CryptoService,
+    LoggerService,
+    IdempotencyService,
+  ],
 })
 export class CommonModule {}

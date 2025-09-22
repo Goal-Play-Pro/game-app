@@ -1,78 +1,52 @@
+import { IsString, IsNumber, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsEthereumAddress, IsNumber, IsOptional, IsEnum } from 'class-validator';
-import { ChainType } from '@common/types/base.types';
 
-export class SiweMessageDto {
-  @ApiProperty({ description: 'Ethereum address' })
-  @IsEthereumAddress()
-  address!: string;
+export class CreateSiweChallenge {
+  @ApiProperty({ description: 'Ethereum wallet address' })
+  @IsString()
+  address: string;
 
-  @ApiProperty({ description: 'Chain ID' })
+  @ApiProperty({ description: 'Chain ID (1 for Ethereum, 56 for BSC, etc.)' })
   @IsNumber()
-  chainId!: number;
+  chainId: number;
 
-  @ApiProperty({ description: 'Optional statement' })
+  @ApiProperty({ description: 'Statement for the challenge', required: false })
   @IsOptional()
   @IsString()
   statement?: string;
 }
 
-export class SiweVerifyDto {
-  @ApiProperty({ description: 'SIWE message' })
+export class VerifySiweSignature {
+  @ApiProperty({ description: 'SIWE message that was signed' })
   @IsString()
-  message!: string;
+  message: string;
 
-  @ApiProperty({ description: 'Signature' })
+  @ApiProperty({ description: 'Signature from wallet' })
   @IsString()
-  signature!: string;
+  signature: string;
 }
 
-export class SolanaMessageDto {
+export class CreateSolanaChallenge {
   @ApiProperty({ description: 'Solana public key' })
   @IsString()
-  publicKey!: string;
+  publicKey: string;
 
-  @ApiProperty({ description: 'Optional statement' })
+  @ApiProperty({ description: 'Statement for the challenge', required: false })
   @IsOptional()
   @IsString()
   statement?: string;
 }
 
-export class SolanaVerifyDto {
-  @ApiProperty({ description: 'Message that was signed' })
+export class VerifySolanaSignature {
+  @ApiProperty({ description: 'Challenge message that was signed' })
   @IsString()
-  message!: string;
+  message: string;
 
   @ApiProperty({ description: 'Base64 encoded signature' })
   @IsString()
-  signature!: string;
+  signature: string;
 
-  @ApiProperty({ description: 'Public key' })
+  @ApiProperty({ description: 'Solana public key' })
   @IsString()
-  publicKey!: string;
-}
-
-export class AuthResponseDto {
-  @ApiProperty({ description: 'JWT access token' })
-  accessToken!: string;
-
-  @ApiProperty({ description: 'User ID' })
-  userId!: string;
-
-  @ApiProperty({ description: 'Primary wallet address' })
-  primaryWallet!: string;
-
-  @ApiProperty({ description: 'Token expiration time' })
-  expiresIn!: string;
-}
-
-export class ChallengeResponseDto {
-  @ApiProperty({ description: 'Challenge nonce' })
-  nonce!: string;
-
-  @ApiProperty({ description: 'Challenge expiration time' })
-  expiresAt!: string;
-
-  @ApiProperty({ description: 'Complete message to sign', required: false })
-  message?: string;
+  publicKey: string;
 }

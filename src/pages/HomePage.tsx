@@ -18,21 +18,29 @@ const HomePage = () => {
     queryKey: ['game-stats'],
     queryFn: () => ApiService.getGameStats(),
     refetchInterval: 30000, // Refetch every 30 seconds
+    retry: 1,
+    retryDelay: 1000,
   });
 
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ['products'],
     queryFn: () => ApiService.getProducts(),
+    retry: 1,
+    retryDelay: 1000,
   });
 
   const { data: leaderboard, isLoading: leaderboardLoading } = useQuery({
     queryKey: ['leaderboard'],
     queryFn: () => ApiService.getLeaderboard(),
+    retry: 1,
+    retryDelay: 1000,
   });
 
   const { data: apiInfo } = useQuery({
     queryKey: ['api-info'],
     queryFn: () => ApiService.getApiInfo(),
+    retry: 1,
+    retryDelay: 1000,
   });
 
   // Check for referral code in URL
@@ -1043,7 +1051,7 @@ const HomePage = () => {
               className="text-center"
             >
               <p className="text-gray-400 text-sm">
-                Connected to {apiInfo.name} • Status: {apiInfo.status} • 
+                Connected to {apiInfo.name} • Status: {apiInfo.status} • Env: {apiInfo.environment} • Storage: {apiInfo.storageMode} •
                 <span className="text-football-green ml-1">Live Data</span>
               </p>
             </motion.div>

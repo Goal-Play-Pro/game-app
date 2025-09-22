@@ -1,4 +1,5 @@
-import axios from 'axios';
+import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { API_CONFIG, getApiUrl } from '../config/api.config';
 import {
   User,
   Wallet,
@@ -9,68 +10,246 @@ import {
   OwnedPlayer,
   PlayerKit,
   PenaltySession,
-  PenaltyAttempt,
-  LedgerEntry,
   GameStats,
-  ApiResponse,
-  PaginatedResponse,
   PlayerProgression,
   ChainType,
   SessionType,
-  PenaltyDirection
+  PenaltyDirection,
+  PlayerStats
 } from '../types';
-import { DivisionHelpers } from '../config/division.config';
-import { REAL_PLAYERS_DATA, RealPlayersService, PlayerProgressionService } from '../data/players.data';
+import { REAL_PLAYERS_DATA } from '../data/players.data';
 import { ReferralStatsDto, ReferralCodeDto } from '../types/referral';
 
-// API Configuration
-const API_BASE_URL = 'http://localhost:3001';
-
-// Create axios instance with default configuration
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Request interceptor to add auth token
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
+// Función para detectar si estamos en desarrollo
+const isDevelopment = () => {
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env.NODE_ENV === 'development';
   }
-);
+  if (typeof window !== 'undefined') {
+    try {
+      // Verificar si estamos en desarrollo por hostname
+      return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    } catch (e) {
+      return false;
+    }
+  }
+  return false;
+};
 
-// Response interceptor for error handling
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    console.warn('API Error:', error.message || error);
-    
-    if (error.response?.status === 401) {
-      // Handle unauthorized access
-      localStorage.removeItem('authToken');
-      window.location.href = '/';
+// Crear instancia de axios configurada
+const createApiClient = (): AxiosInstance => {
+  const client = axios.create({
+    baseURL: API_CONFIG.BASE_URL,
+    timeout: API_CONFIG.TIMEOUT,
+    headers: API_CONFIG.DEFAULT_HEADERS,
+  });
+
+  // Interceptor para añadir token de autenticación
+  client.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem(API_CONFIG.AUTH.TOKEN_KEY);
+      if (token) {
+        config.headers[API_CONFIG.AUTH.TOKEN_HEADER] = `Bearer ${token}`;
+      }
+      
+      // Log de debugging para desarrollo
+      if (isDevelopment()) {
+        console.log(`🌐 API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+      }
+      
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+
+  // Interceptor para manejar respuestas y errores
+  client.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      // Log de debugging para desarrollo
+      if (isDevelopment()) {
+        console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.baseURL}${error.config?.url}`, error.response?.status, error.message);
+      }
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem(API_CONFIG.AUTH.TOKEN_KEY);
+        localStorage.removeItem(API_CONFIG.AUTH.REFRESH_TOKEN_KEY);
+      }
+      return Promise.reject(error);
+    }
+  );
+
+  return client;
+};
+
+// Instancia global del cliente API
+let apiClient = createApiClient();
+
+// Función para recrear el cliente cuando cambie la URL base
+export const reinitializeApiClient = () => {
+  apiClient = createApiClient();
+  console.log(`🔄 API client reinitializado con URL: ${API_CONFIG.BASE_URL}`);
+};
+
+// Wrapper robusto para requests con fallback
+const makeRequest = async <T = any>(
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  endpoint: string,
+  data?: any,
+  config?: any
+): Promise<T> => {
+  try {
+    // Log de debugging para desarrollo
+    if (isDevelopment()) {
+      console.log(`🌐 Making ${method} request to: ${API_CONFIG.BASE_URL}${endpoint}`);
     }
     
-    return Promise.reject(error);
+    let response: AxiosResponse<T>;
+    
+    switch (method) {
+      case 'GET':
+        response = await apiClient.get(endpoint, config);
+        break;
+      case 'POST':
+        response = await apiClient.post(endpoint, data, config);
+        break;
+      case 'PUT':
+        response = await apiClient.put(endpoint, data, config);
+        break;
+      case 'DELETE':
+        response = await apiClient.delete(endpoint, config);
+        break;
+      default:
+        throw new Error(`Método no soportado: ${method}`);
+    }
+    
+    // Log de éxito para desarrollo
+    if (isDevelopment()) {
+      console.log(`✅ API Success: ${method} ${endpoint}`, response.status);
+    }
+    
+    return response.data;
+  } catch (error: any) {
+    // Si el backend no está disponible, usar datos de fallback
+    if (error.code === 'ECONNREFUSED' || 
+        error.message?.includes('Network Error') ||
+        error.message?.includes('ERR_CONNECTION_REFUSED') ||
+        error.message?.includes('ERR_NETWORK') ||
+        error.response?.status >= 500) {
+      
+      console.warn(`🔄 Backend no disponible para ${method} ${endpoint}, usando datos mock`);
+      return getFallbackData(endpoint, method, data) as T;
+    }
+    
+    // Log de error para desarrollo
+    if (isDevelopment()) {
+      console.error(`❌ API Error: ${method} ${endpoint}`, error.response?.status, error.message);
+    }
+    
+    throw error;
   }
-);
+};
 
-// Fallback data for when API is not available
+// Datos de fallback para cuando el backend no esté disponible
+const getFallbackData = (endpoint: string, method: string, data?: any): any => {
+  const cleanEndpoint = endpoint.replace(/^\//, '');
+  
+  switch (cleanEndpoint) {
+    case 'products':
+      return FALLBACK_DATA.products;
+      
+    case 'orders':
+      if (method === 'POST') {
+        return {
+          id: `mock-order-${Date.now()}`,
+          ...data,
+          status: 'pending',
+          totalPriceUSDT: '25.00',
+          receivingWallet: '0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000',
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return FALLBACK_DATA.orders;
+      
+    case 'owned-players':
+      return FALLBACK_DATA.ownedPlayers;
+      
+    case 'penalty/sessions':
+      if (method === 'POST') {
+        return {
+          id: `mock-session-${Date.now()}`,
+          ...data,
+          status: 'in_progress',
+          hostScore: 0,
+          guestScore: 0,
+          currentRound: 1,
+          createdAt: new Date().toISOString()
+        };
+      }
+      return FALLBACK_DATA.sessions;
+      
+    case 'health':
+      return {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: 3600,
+        memory: { rss: '45 MB' }
+      };
+      
+    case '':
+      return {
+        name: 'Football Gaming Platform API',
+        version: '1.0.0',
+        status: 'running (mock)',
+        features: ['Mock Mode Active']
+      };
+      
+    case 'referral/my-code':
+      return {
+        id: 'mock-code-1',
+        userId: 'mock-user',
+        walletAddress: '0x742d35Cc...',
+        code: 'DEMO123',
+        isActive: true,
+        totalReferrals: 0,
+        totalCommissions: '0.00'
+      };
+      
+    case 'referral/stats':
+      return {
+        totalReferrals: 0,
+        activeReferrals: 0,
+        totalCommissions: '0.00',
+        pendingCommissions: '0.00',
+        paidCommissions: '0.00',
+        thisMonthCommissions: '0.00',
+        referralLink: 'https://goalplay.pro?ref=DEMO123',
+        recentReferrals: [],
+        recentCommissions: []
+      };
+      
+    default:
+      if (cleanEndpoint.includes('variants')) {
+        return FALLBACK_DATA.variants;
+      }
+      if (cleanEndpoint.includes('progression')) {
+        return FALLBACK_DATA.progression;
+      }
+      if (cleanEndpoint.includes('farming-status')) {
+        return FALLBACK_DATA.farmingStatus;
+      }
+      return null;
+  }
+};
+
+// Datos de fallback
 const FALLBACK_DATA = {
   gameStats: {
     totalUsers: 7542,
     totalGames: 38291,
-    totalRewards: '892,456.78',
+    totalRewards: '892456.78',
     activeUsers: 743
   },
   leaderboard: Array.from({ length: 10 }, (_, index) => ({
@@ -79,563 +258,489 @@ const FALLBACK_DATA = {
     username: `Player ${index + 1}`,
     wins: Math.floor(Math.random() * 100) + 10,
     totalGames: Math.floor(Math.random() * 200) + 50,
-    winRate: ((Math.random() * 0.4) + 0.6).toFixed(2),
+    winRate: ((Math.random() * 0.4) + 0.6) * 100,
     rewards: (Math.random() * 10000 + 1000).toFixed(2)
   })),
   products: [
     {
-      id: '1',
+      id: 'product-tercera',
       name: 'Pack Tercera División',
       description: 'Comienza tu aventura con jugadores básicos',
-      imageUrl: 'https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg',
-      basePrice: 10,
-      currency: 'USDT',
-      category: 'PLAYER_PACK',
-      rarity: 'TERCERA',
+      type: 'character_pack',
       isActive: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     },
     {
-      id: '2',
+      id: 'product-segunda',
+      name: 'Pack Segunda División',
+      description: 'Jugadores intermedios con mejores estadísticas',
+      type: 'character_pack',
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: 'product-primera',
       name: 'Pack Primera División',
       description: 'Jugadores de élite para gamers profesionales',
-      imageUrl: 'https://images.pexels.com/photos/1884574/pexels-photo-1884574.jpeg',
-      basePrice: 25,
-      currency: 'USDT',
-      category: 'PLAYER_PACK',
-      rarity: 'PRIMERA',
+      type: 'character_pack',
       isActive: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
-  ]
+  ],
+  variants: [
+    {
+      id: 'variant-tercera-1',
+      productId: 'product-tercera',
+      name: 'Pack Tercera División - Nivel 1',
+      description: 'Pack básico de tercera división',
+      division: 'tercera',
+      level: 1,
+      priceUSDT: '30.00',
+      isActive: true,
+      gachaPoolId: 'pool_tercera'
+    },
+    {
+      id: 'variant-segunda-1',
+      productId: 'product-segunda',
+      name: 'Pack Segunda División - Nivel 1',
+      description: 'Pack intermedio de segunda división',
+      division: 'segunda',
+      level: 1,
+      priceUSDT: '200.00',
+      isActive: true,
+      gachaPoolId: 'pool_segunda'
+    },
+    {
+      id: 'variant-primera-1',
+      productId: 'product-primera',
+      name: 'Pack Primera División - Nivel 1',
+      description: 'Pack élite de primera división',
+      division: 'primera',
+      level: 1,
+      priceUSDT: '1000.00',
+      isActive: true,
+      gachaPoolId: 'pool_primera'
+    }
+  ],
+  orders: [],
+  ownedPlayers: [],
+  sessions: [],
+  progression: {
+    level: 1,
+    experience: 0,
+    requiredExperience: 100,
+    stats: {
+      speed: 50,
+      shooting: 50,
+      passing: 50,
+      defending: 50,
+      goalkeeping: 50,
+      overall: 50
+    },
+    bonuses: {
+      speed: 0,
+      shooting: 0,
+      passing: 0,
+      defending: 0,
+      goalkeeping: 0,
+      overall: 0
+    },
+    totalStats: {
+      speed: 50,
+      shooting: 50,
+      passing: 50,
+      defending: 50,
+      goalkeeping: 50,
+      overall: 50
+    }
+  },
+  farmingStatus: {
+    canPlay: true,
+    farmingProgress: 100,
+    reason: 'Player is ready to play',
+    requirements: {
+      level: { current: 5, required: 5, met: true },
+      experience: { current: 500, required: 500, met: true }
+    }
+  }
 };
 
 // API Service Class
 export class ApiService {
-  // Authentication endpoints
+  // Función para cambiar la URL base de la API
+  static setBaseUrl(newUrl: string) {
+    API_CONFIG.BASE_URL = newUrl;
+    reinitializeApiClient();
+    console.log(`🔄 API URL actualizada a: ${newUrl}`);
+  }
+
+  // Función para verificar conectividad con el backend
+  static async checkConnection(): Promise<boolean> {
+    try {
+      await makeRequest('GET', API_CONFIG.ENDPOINTS.HEALTH);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // AUTENTICACIÓN
   static async createSiweChallenge(address: string, chainId: number) {
-    const response = await apiClient.post('/auth/siwe/challenge', {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.AUTH_SIWE_CHALLENGE, {
       address,
       chainId,
       statement: 'Sign in to Gol Play'
     });
-    return response.data;
   }
 
   static async verifySiweSignature(message: string, signature: string) {
-    const response = await apiClient.post('/auth/siwe/verify', {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.AUTH_SIWE_VERIFY, {
       message,
       signature
     });
-    return response.data;
   }
 
   static async createSolanaChallenge(publicKey: string) {
-    const response = await apiClient.post('/auth/solana/challenge', {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.AUTH_SOLANA_CHALLENGE, {
       publicKey,
       statement: 'Sign in to Gol Play'
     });
-    return response.data;
   }
 
   static async verifySolanaSignature(message: string, signature: string, publicKey: string) {
-    const response = await apiClient.post('/auth/solana/verify', {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.AUTH_SOLANA_VERIFY, {
       message,
       signature,
       publicKey
     });
-    return response.data;
   }
 
-  // Wallet endpoints
-  static async getUserWallets(): Promise<Wallet[]> {
-    const response = await apiClient.get('/wallets');
-    return response.data;
-  }
-
-  static async linkWallet(address: string, chainType: ChainType, signedMessage: string, signature: string) {
-    const response = await apiClient.post('/wallets/link', {
-      address,
-      chainType,
-      signedMessage,
-      signature
-    });
-    return response.data;
-  }
-
-  static async setPrimaryWallet(address: string) {
-    const response = await apiClient.put(`/wallets/${address}/primary`);
-    return response.data;
-  }
-
-  // Shop endpoints
+  // PRODUCTOS Y TIENDA
   static async getProducts(): Promise<Product[]> {
-    const response = await apiClient.get('/products');
-    return response.data;
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.PRODUCTS);
   }
 
   static async getProductVariants(productId: string): Promise<ProductVariant[]> {
-    const response = await apiClient.get(`/products/${productId}/variants`);
-    return response.data;
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.PRODUCT_VARIANTS(productId));
   }
 
-  // Order endpoints
+  // ÓRDENES
   static async createOrder(productVariantId: string, quantity: number, chainType: ChainType, paymentWallet: string) {
-    const response = await apiClient.post('/orders', {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.ORDERS, {
       productVariantId,
       quantity,
       chainType,
       paymentWallet
     });
-    return response.data;
   }
 
   static async getUserOrders(): Promise<Order[]> {
-    const response = await apiClient.get('/orders');
-    return response.data;
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.ORDERS);
   }
 
-  static async getOrderById(orderId: string): Promise<Order> {
-    const response = await apiClient.get(`/orders/${orderId}`);
-    return response.data;
+  static async getOrderDetails(orderId: string) {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.ORDER_DETAILS(orderId));
   }
 
-  static async cancelOrder(orderId: string) {
-    const response = await apiClient.put(`/orders/${orderId}/cancel`);
-    return response.data;
+  static async getOrderPaymentStatus(orderId: string) {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.ORDER_PAYMENT_STATUS(orderId));
   }
 
-  // Inventory endpoints
+  // INVENTARIO
   static async getOwnedPlayers(): Promise<OwnedPlayer[]> {
-    const response = await apiClient.get('/owned-players');
-    return response.data;
-  }
-
-  static async getPlayerKit(ownedPlayerId: string): Promise<PlayerKit> {
-    const response = await apiClient.get(`/owned-players/${ownedPlayerId}/kit`);
-    return response.data;
-  }
-
-  static async updatePlayerKit(ownedPlayerId: string, name: string, primaryColor: string, secondaryColor: string, logoUrl?: string) {
-    const response = await apiClient.put(`/owned-players/${ownedPlayerId}/kit`, {
-      name,
-      primaryColor,
-      secondaryColor,
-      logoUrl
-    });
-    return response.data;
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.OWNED_PLAYERS);
   }
 
   static async getPlayerProgression(ownedPlayerId: string): Promise<PlayerProgression> {
-    const response = await apiClient.get(`/owned-players/${ownedPlayerId}/progression`);
-    return response.data;
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.PLAYER_PROGRESSION(ownedPlayerId));
   }
 
-  // Nuevos endpoints para farming y progresión
+  static async getPlayerKit(ownedPlayerId: string): Promise<PlayerKit> {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.PLAYER_KIT(ownedPlayerId));
+  }
+
+  static async updatePlayerKit(ownedPlayerId: string, kitData: any) {
+    return makeRequest('PUT', API_CONFIG.ENDPOINTS.PLAYER_KIT(ownedPlayerId), kitData);
+  }
+
+  static async getFarmingStatus(ownedPlayerId: string) {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.FARMING_STATUS(ownedPlayerId));
+  }
+
   static async processFarmingSession(ownedPlayerId: string, farmingType: string = 'general') {
-    const response = await apiClient.post(`/owned-players/${ownedPlayerId}/farming`, {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.FARMING_SESSION(ownedPlayerId), {
       farmingType
     });
-    return response.data;
   }
 
-  // Endpoints para datos de jugadores reales
+  // PENALTY GAMEPLAY
+  static async createPenaltySession(type: SessionType, playerId: string, maxRounds: number = 5) {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.PENALTY_SESSIONS, {
+      type,
+      playerId,
+      maxRounds
+    });
+  }
+
+  static async attemptPenalty(sessionId: string, direction: PenaltyDirection, power: number) {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.PENALTY_ATTEMPTS(sessionId), {
+      direction,
+      power
+    });
+  }
+
+  static async getUserSessions(): Promise<PenaltySession[]> {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.PENALTY_SESSIONS);
+  }
+
+  static async getSessionDetails(sessionId: string) {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.PENALTY_SESSION_DETAILS(sessionId));
+  }
+
+  static async joinSession(sessionId: string, playerId: string) {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.PENALTY_JOIN(sessionId), {
+      playerId
+    });
+  }
+
+  // WALLETS
+  static async getAllUserWallets(): Promise<Wallet[]> {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.WALLETS);
+  }
+
+  static async linkWallet(address: string, chainType: ChainType, signedMessage: string, signature: string) {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.WALLET_LINK, {
+      address,
+      chainType,
+      signedMessage,
+      signature
+    });
+  }
+
+  static async unlinkWallet(address: string) {
+    return makeRequest('DELETE', API_CONFIG.ENDPOINTS.WALLET_UNLINK(address));
+  }
+
+  static async setPrimaryWallet(address: string) {
+    return makeRequest('PUT', API_CONFIG.ENDPOINTS.WALLET_SET_PRIMARY(address));
+  }
+
+  // CONTABILIDAD
+  static async getTransactions(filters?: any): Promise<any[]> {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.LEDGER_TRANSACTIONS, { params: filters });
+  }
+
+  static async getBalance(account?: string, currency?: string) {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.LEDGER_BALANCE, {
+      params: { account, currency }
+    });
+  }
+
+  // REFERIDOS
+  static async getMyReferralCode(): Promise<ReferralCodeDto | null> {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.REFERRAL_MY_CODE);
+  }
+
+  static async createReferralCode(customCode?: string): Promise<ReferralCodeDto> {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.REFERRAL_CREATE_CODE, {
+      customCode
+    });
+  }
+
+  static async registerReferral(referralCode: string) {
+    return makeRequest('POST', API_CONFIG.ENDPOINTS.REFERRAL_REGISTER, {
+      referralCode
+    });
+  }
+
+  static async getReferralStats(): Promise<ReferralStatsDto> {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.REFERRAL_STATS);
+  }
+
+  static async validateReferralCode(code: string) {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.REFERRAL_VALIDATE(code));
+  }
+
+  // BLOCKCHAIN PAYMENTS
+  static async notifyPaymentCompleted(orderId: string, transactionHash: string) {
+    return makeRequest('POST', `/orders/${orderId}/payment-completed`, {
+      transactionHash
+    });
+  }
+
+  static async verifyBlockchainTransaction(txHash: string, fromAddress: string, toAddress: string, expectedAmount: string) {
+    return makeRequest('POST', '/blockchain/verify-transaction', {
+      txHash,
+      fromAddress,
+      toAddress,
+      expectedAmount
+    });
+  }
+
+  static async getUSDTBalance(address: string) {
+    return makeRequest('GET', `/blockchain/balance/${address}`);
+  }
+
+  // SISTEMA
+  static async getHealthCheck() {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.HEALTH);
+  }
+
+  static async getApiInfo() {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.API_INFO);
+  }
+
+  static async getVersion() {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.VERSION);
+  }
+
+  static async getStatus() {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.STATUS);
+  }
+
+  // ESTADÍSTICAS
+  static async getGameStats(): Promise<GameStats> {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.GLOBAL_STATS);
+  }
+
+  static async getLeaderboard(): Promise<any[]> {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.LEADERBOARD);
+  }
+
+  static async getUserStats() {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.USER_STATS);
+  }
+
+  // DATOS AUXILIARES
   static async getRealPlayersData() {
     try {
-      // Intentar obtener desde API, fallback a datos locales
-      const response = await apiClient.get('/gacha/real-players');
-      return response.data;
+      return await makeRequest('GET', '/gacha/real-players');
     } catch (error) {
       console.warn('Using local real players data');
       return REAL_PLAYERS_DATA;
     }
   }
 
-  static async getPlayersByDivision(division: string) {
-    try {
-      const response = await apiClient.get(`/gacha/players-by-division/${division}`);
-      return response.data;
-    } catch (error) {
-      console.warn('Using local players data for division:', division);
-      return RealPlayersService.getPlayersForDivision(division);
-    }
-  }
-
-  // Penalty game endpoints
-  static async createPenaltySession(type: SessionType, playerId: string, maxRounds: number = 5) {
-    const response = await apiClient.post('/penalty/sessions', {
-      type,
-      playerId,
-      maxRounds
-    });
-    return response.data;
-  }
-
-  static async joinPenaltySession(sessionId: string, playerId: string) {
-    const response = await apiClient.post(`/penalty/sessions/${sessionId}/join`, {
-      playerId
-    });
-    return response.data;
-  }
-
-  static async attemptPenalty(sessionId: string, direction: PenaltyDirection, power: number) {
-    const response = await apiClient.post(`/penalty/sessions/${sessionId}/attempts`, {
-      direction,
-      power
-    });
-    return response.data;
-  }
-
-  static async getPenaltySession(sessionId: string): Promise<PenaltySession> {
-    const response = await apiClient.get(`/penalty/sessions/${sessionId}`);
-    return response.data;
-  }
-
-  static async getUserSessions(): Promise<PenaltySession[]> {
-    const response = await apiClient.get('/penalty/sessions');
-    return response.data;
-  }
-
-  // Ledger endpoints
-  static async getTransactions(account?: string, referenceType?: string): Promise<LedgerEntry[]> {
-    const params = new URLSearchParams();
-    if (account) params.append('account', account);
-    if (referenceType) params.append('referenceType', referenceType);
-    
-    const response = await apiClient.get(`/ledger/transactions?${params.toString()}`);
-    return response.data;
-  }
-
-  static async getBalance(account: string, currency: string) {
-    const response = await apiClient.get(`/ledger/balance?account=${account}&currency=${currency}`);
-    return response.data;
-  }
-
-  // System endpoints
-  static async getHealthCheck() {
-    const response = await apiClient.get('/health');
-    return response.data;
-  }
-
-  static async getApiInfo() {
-    const response = await apiClient.get('/');
-    return response.data;
-  }
-
-  static async getStatus() {
-    const response = await apiClient.get('/status');
-    return response.data;
-  }
-
-  // Referral endpoints
-  static async getMyReferralCode(): Promise<ReferralCodeDto | null> {
-    try {
-      const response = await apiClient.get('/referral/my-code');
-      console.log('✅ Referral code fetched:', response.data);
-      return response.data;
-    } catch (error) {
-      console.warn('⚠️ No referral code found or API not available:', error);
-      return null;
-    }
-  }
-
-  static async createReferralCode(customCode?: string): Promise<ReferralCodeDto> {
-    try {
-      console.log('📝 Creating referral code with custom code:', customCode);
-      const response = await apiClient.post('/referral/create-code', {
-        customCode
-      });
-      console.log('✅ Referral code created:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error creating referral code:', error);
-      throw error;
-    }
-  }
-
-  static async registerReferral(referralCode: string): Promise<{ success: boolean; message: string }> {
-    try {
-      const response = await apiClient.post('/referral/register', {
-        referralCode
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error registering referral:', error);
-      return { success: false, message: 'Error registering referral' };
-    }
-  }
-
-  static async getReferralStats(): Promise<ReferralStatsDto> {
-    try {
-      const response = await apiClient.get('/referral/stats');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching referral stats:', error);
-      throw error;
-    }
-  }
-
-  static async validateReferralCode(code: string): Promise<{ valid: boolean; referrerWallet?: string }> {
-    try {
-      const response = await apiClient.get(`/referral/validate/${code}`);
-      return response.data;
-    } catch (error) {
-      console.error('Error validating referral code:', error);
-      return { valid: false };
-    }
-  }
-
-  // Statistics and Leaderboard endpoints (NUEVOS)
-  static async getUserStatistics(address: string) {
-    try {
-      const response = await apiClient.get(`/statistics/user/${address}`);
-      return response.data;
-    } catch (error) {
-      console.warn('User stats not available from backend');
-      return null;
-    }
-  }
-
-  static async updateUserStatistics(statsData: {
-    address: string;
-    gamesPlayed: number;
-    gamesWon: number;
-    totalRewards: string;
-  }) {
-    const response = await apiClient.post('/statistics/user/update', statsData);
-    return response.data;
-  }
-
-  static async recordGameResult(gameData: {
-    userAddress: string;
-    won: boolean;
-    reward: string;
-    gameData: any;
-    timestamp: string;
-  }) {
-    const response = await apiClient.post('/statistics/game-result', gameData);
-    return response.data;
-  }
-
-  static async logWalletConnection(connectionData: {
-    address: string;
-    chainId: number;
-    timestamp: string;
-    userAgent: string;
-    referrer: string;
-  }) {
-    const response = await apiClient.post('/statistics/wallet-connection', connectionData);
-    return response.data;
-  }
-
-  static async getGlobalStatistics() {
-    try {
-      const response = await apiClient.get('/statistics/global');
-      return response.data;
-    } catch (error) {
-      console.warn('Global stats not available from backend');
-      return null;
-    }
-  }
-
-  // Wallet Management endpoints (NUEVOS)
-  static async getAllUserWallets(): Promise<Wallet[]> {
-    try {
-      const response = await apiClient.get('/wallets');
-      return response.data;
-    } catch (error) {
-      console.warn('Wallets not available from backend');
-      return [];
-    }
-  }
-
-  static async unlinkWallet(address: string) {
-    const response = await apiClient.delete(`/wallets/${address}`);
-    return response.data;
-  }
-
-  // Gacha System endpoints (NUEVOS)
-  static async getGachaPool(poolId: string) {
-    const response = await apiClient.get(`/gacha/pools/${poolId}`);
-    return response.data;
-  }
-
-  static async getGachaPlayer(playerId: string) {
-    const response = await apiClient.get(`/gacha/players/${playerId}`);
-    return response.data;
-  }
-
-  static async getFarmingStatus(ownedPlayerId: string) {
-    const response = await apiClient.get(`/owned-players/${ownedPlayerId}/farming-status`);
-    return response.data;
-  }
-
-  // Payment Status endpoints (NUEVOS)
-  static async getPaymentStatus(orderId: string) {
-    const response = await apiClient.get(`/orders/${orderId}/payment-status`);
-    return response.data;
-  }
-
-  // Real-time Data endpoints (NUEVOS)
-  static async getSystemHealth() {
-    const response = await apiClient.get('/health');
-    return response.data;
-  }
-
-  static async getSystemStatus() {
-    const response = await apiClient.get('/status');
-    return response.data;
-  }
-
-  static async getApiVersion() {
-    const response = await apiClient.get('/version');
-    return response.data;
-  }
-
-  // Custom endpoints for frontend
-  static async getGameStats(): Promise<GameStats> {
-    try {
-      await this.getHealthCheck();
-      // If API is available, return dynamic stats
-      return {
-        totalUsers: Math.floor(Math.random() * 10000) + 5000,
-        totalGames: Math.floor(Math.random() * 50000) + 25000,
-        totalRewards: (Math.random() * 1000000 + 500000).toFixed(2),
-        activeUsers: Math.floor(Math.random() * 1000) + 500
-      };
-    } catch (error) {
-      console.warn('API not available, using fallback data for game stats');
-      return FALLBACK_DATA.gameStats;
-    }
-  }
-
-  // Division-related endpoints (MEJORADOS)
-  static async getDivisionConfig(division: string) {
-    try {
-      return DivisionHelpers.getDivisionConfig(division);
-    } catch (error) {
-      console.warn('Division config not available');
-      return null;
-    }
-  }
-
-  static async validatePlayerStats(stats: any, division: string) {
-    try {
-      return DivisionHelpers.validateStats(stats, division);
-    } catch (error) {
-      console.warn('Stats validation not available');
-      return true;
-    }
-  }
-
-  // Penalty Probability endpoints (NUEVOS)
-  static async calculatePenaltyChance(playerStats: any, division: string) {
-    try {
-      // Usar servicio local de probabilidad
-      const { PenaltyProbabilityService } = await import('../services/penalty-probability.service');
-      const service = new PenaltyProbabilityService();
-      return service.computeChance(playerStats, division);
-    } catch (error) {
-      console.warn('Penalty probability calculation not available');
-      return 50; // Fallback
-    }
-  }
-
-  static async simulatePenaltyOutcome(playerStats: any, division: string, rng?: number) {
-    try {
-      const { PenaltyProbabilityService } = await import('../services/penalty-probability.service');
-      const service = new PenaltyProbabilityService();
-      return service.decidePenalty(playerStats, division, rng);
-    } catch (error) {
-      console.warn('Penalty simulation not available');
-      return Math.random() < 0.5; // Fallback
-    }
-  }
-
-  // Market Data endpoints (NUEVOS)
   static async getMarketData() {
     try {
-      const [products, orders, stats] = await Promise.all([
+      const [products, orders] = await Promise.all([
         this.getProducts(),
-        this.getUserOrders(),
-        this.getGameStats()
+        this.getUserOrders()
       ]);
       
       return {
         products,
         recentOrders: orders?.slice(0, 10) || [],
-        marketStats: stats,
         totalVolume: orders?.reduce((sum, order) => sum + parseFloat(order.totalPriceUSDT), 0) || 0
       };
     } catch (error) {
       console.warn('Market data not available');
-      return null;
+      return {
+        products: FALLBACK_DATA.products,
+        recentOrders: [],
+        totalVolume: 0
+      };
     }
   }
 
-  // Complete User Profile endpoints (NUEVOS)
-  static async getCompleteUserProfile() {
+  static async getCompleteUserProfile(): Promise<CompleteUserProfile> {
     try {
-      const [wallets, players, orders, transactions, referralStats] = await Promise.all([
+      const [wallets, players, orders] = await Promise.all([
         this.getAllUserWallets(),
         this.getOwnedPlayers(),
-        this.getUserOrders(),
-        this.getTransactions(),
-        this.getReferralStats().catch(() => null)
+        this.getUserOrders()
       ]);
       
-      return {
+      const profile: CompleteUserProfile = {
         wallets,
         players,
         orders,
-        transactions,
-        referralStats,
         totalSpent: orders?.reduce((sum, order) => sum + parseFloat(order.totalPriceUSDT), 0) || 0,
-        totalPlayers: players?.length || 0
+        totalPlayers: players?.length || 0,
+        transactions: [], 
+        referralStats: { totalCommissions: '0.00' },
       };
+      
+      return profile;
     } catch (error) {
       console.warn('Complete profile data not available');
-      return null;
-    }
-  }
-  static async getLeaderboard(): Promise<any[]> {
-    try {
-      const sessions = await this.getUserSessions();
-      if (sessions && sessions.length > 0) {
-        // Process sessions to create leaderboard
-        return sessions.map((session, index) => ({
-          rank: index + 1,
-          userId: session.hostUserId,
-          username: `Player ${session.hostUserId.slice(0, 6)}`,
-          wins: Math.floor(Math.random() * 100) + 10,
-          totalGames: Math.floor(Math.random() * 200) + 50,
-          winRate: ((Math.random() * 0.4) + 0.6).toFixed(2),
-          rewards: (Math.random() * 10000 + 1000).toFixed(2)
-        }));
-      }
-      return FALLBACK_DATA.leaderboard;
-    } catch (error) {
-      console.warn('API not available, using fallback data for leaderboard');
-      return FALLBACK_DATA.leaderboard;
+      const fallbackProfile: CompleteUserProfile = {
+        wallets: [],
+        players: [],
+        orders: [],
+        totalSpent: 0,
+        totalPlayers: 0,
+        transactions: [],
+        referralStats: { totalCommissions: '0.00' },
+      };
+      
+      return fallbackProfile;
     }
   }
 
+  static async getGlobalStatistics() {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.GLOBAL_STATS);
+  }
+
+  static async getSystemHealth() {
+    return makeRequest('GET', API_CONFIG.ENDPOINTS.HEALTH);
+  }
+
+  // FUNCIONES AUXILIARES
+  static async calculatePenaltyChance(playerStats: PlayerStats, division: string): Promise<number> {
+    try {
+      console.log(`🎯 Calculating penalty chance for division: ${division}`, playerStats);
+      return await makeRequest('POST', '/penalty/calculate-chance', {
+        playerStats,
+        division
+      });
+    } catch (error) {
+      console.warn('⚠️ Backend penalty calculation not available, using fallback');
+      // Fallback calculation
+      const totalStats = playerStats.speed + playerStats.shooting + playerStats.passing + 
+                        playerStats.defending + playerStats.goalkeeping;
+      
+      const divisionRanges = {
+        primera: { min: 95, max: 171, minChance: 50, maxChance: 90 },
+        segunda: { min: 76, max: 152, minChance: 40, maxChance: 80 },
+        tercera: { min: 57, max: 133, minChance: 30, maxChance: 70 }
+      };
+      
+      const range = divisionRanges[division.toLowerCase() as keyof typeof divisionRanges] || divisionRanges.tercera;
+      const ratio = Math.max(0, Math.min(1, (totalStats - range.min) / (range.max - range.min)));
+      const chance = range.minChance + (range.maxChance - range.minChance) * ratio;
+      
+      const finalChance = Math.floor(Math.max(5, Math.min(95, chance)));
+      console.log(`📊 Fallback calculation result: ${finalChance}%`);
+      return Math.floor(Math.max(5, Math.min(95, chance)));
+    }
+  }
 }
 
-// Export default instance
-export default ApiService;
+// Interfaces locales para el servicio
+export interface LedgerEntry {
+  id: string;
+  type: string;
+  amount: string;
+  currency: string;
+  timestamp: string;
+  description?: string;
+}
 
-// Export named instance for compatibility
-export const api = {
-  getNFTs: (filters?: any) => Promise.resolve([]),
-  search: (query: string) => Promise.resolve({ nfts: [] }),
-  likeNFT: (id: string) => Promise.resolve(true),
-  buyNFT: (id: string) => Promise.resolve(true),
-  getNFTById: (id: string) => Promise.resolve(null),
-  getCollections: () => Promise.resolve([]),
-  getCollectionById: (id: string) => Promise.resolve(null),
-  getCollectionNFTs: (id: string) => Promise.resolve([]),
-  createNFT: (data: any) => Promise.resolve({}),
-};
+export interface CompleteUserProfile {
+  wallets: Wallet[];
+  players: OwnedPlayer[];
+  orders: Order[];
+  totalSpent: number;
+  totalPlayers: number;
+  transactions: LedgerEntry[];
+  referralStats: {
+    totalCommissions: string;
+    [key: string]: any;
+  };
+}
+
+export default ApiService;

@@ -1,334 +1,197 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { DataAdapterService } from '../../common/services/data-adapter.service';
-import { InventoryService } from '../inventory/inventory.service';
-import { Division, DivisionHelpers } from '../../config/division.config';
-import { PenaltyProbabilityService } from '../../services/penalty-probability.service';
-import { RealPlayersService } from '../../data/players.data';
-import { OwnedPlayer } from '../inventory/entities/inventory.entity';
-import { PenaltySession, PenaltyAttempt, PenaltyDirection } from './entities/penalty.entity';
-import { CreateSessionDto, JoinSessionDto, PenaltyAttemptDto } from './dto/penalty.dto';
-import { SessionType, SessionStatus } from '../../common/types/base.types';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { PenaltySession } from '../../database/entities/penalty-session.entity';
+import { PenaltyAttempt } from '../../database/entities/penalty-attempt.entity';
+import { OwnedPlayer } from '../../database/entities/owned-player.entity';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class PenaltyService {
   constructor(
-    private dataAdapter: DataAdapterService,
-    private inventoryService: InventoryService,
-    private penaltyProbabilityService: PenaltyProbabilityService,
+    @InjectRepository(PenaltySession)
+    private sessionRepository: Repository<PenaltySession>,
+    @InjectRepository(PenaltyAttempt)
+    private attemptRepository: Repository<PenaltyAttempt>,
+    @InjectRepository(OwnedPlayer)
+    private ownedPlayerRepository: Repository<OwnedPlayer>,
   ) {}
 
-  async createSession(userId: string, dto: CreateSessionDto): Promise<PenaltySession> {
-    // Verify user owns the player
-    const userPlayers = await this.inventoryService.getUserPlayers(userId);
-    const playerOwned = userPlayers.some((p: OwnedPlayer) => p.playerId === dto.playerId);
+  async getUserSessions(userId: string) {
+    return this.sessionRepository.find({
+      where: [
+        { hostUserId: userId },
+        { guestUserId: userId }
+      ],
+      order: { createdAt: 'DESC' }
+    });
+  }
+
+  async createSession(userId: string, sessionData: any) {
+    // Verify player ownership
+    const ownedPlayer = await this.ownedPlayerRepository.findOne({
+      where: { id: sessionData.playerId, userId }
+    });
     
-    if (!playerOwned) {
-      throw new BadRequestException('Player not owned by user');
+    if (!ownedPlayer) {
+      throw new ForbiddenException('Player not owned by user');
     }
 
-    const seed = this.generateSessionSeed(userId, dto.playerId);
+    // Verify player is ready to play
+    if (ownedPlayer.currentLevel < 5 || ownedPlayer.experience < 500) {
+      throw new BadRequestException('Player needs more training before playing');
+    }
 
-    const session = await this.dataAdapter.create('penalty-sessions', {
+    // Create session
+    const session = await this.sessionRepository.save({
       hostUserId: userId,
-      type: dto.type,
-      status: dto.type === SessionType.SINGLE_PLAYER ? SessionStatus.IN_PROGRESS : SessionStatus.WAITING,
-      hostPlayerId: dto.playerId,
-      guestPlayerId: dto.type === SessionType.SINGLE_PLAYER ? 'ai_goalkeeper' : undefined,
-      maxRounds: dto.maxRounds || 5,
+      guestUserId: sessionData.type === 'multiplayer' ? null : null,
+      type: sessionData.type || 'single_player',
+      status: 'in_progress',
+      hostPlayerId: sessionData.playerId,
+      guestPlayerId: sessionData.type === 'single_player' ? 'ai_goalkeeper' : null,
+      maxRounds: sessionData.maxRounds || 5,
       currentRound: 1,
       hostScore: 0,
       guestScore: 0,
-      seed,
-      startedAt: dto.type === SessionType.SINGLE_PLAYER ? new Date().toISOString() : undefined,
+      seed: uuidv4(),
+      startedAt: new Date(),
     });
-
-    console.log(`Penalty session created: ${session.id} by user ${userId}`);
 
     return session;
   }
 
-  async joinSession(sessionId: string, userId: string, dto: JoinSessionDto): Promise<PenaltySession> {
-    const session = await this.dataAdapter.findById('penalty-sessions', sessionId);
-    if (!session) {
+  async getSessionDetails(sessionId: string, userId: string) {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+      relations: ['hostPlayer', 'guestPlayer']
+    });
+    
+    if (!session || (session.hostUserId !== userId && session.guestUserId !== userId)) {
       throw new NotFoundException('Session not found');
     }
-
-    if (session.status !== SessionStatus.WAITING) {
-      throw new BadRequestException('Session is not available to join');
-    }
-
-    if (session.hostUserId === userId) {
-      throw new BadRequestException('Cannot join own session');
-    }
-
-    // Verify user owns the player
-    const userPlayers = await this.inventoryService.getUserPlayers(userId);
-    const playerOwned = userPlayers.some((p: OwnedPlayer) => p.playerId === dto.playerId);
     
-    if (!playerOwned) {
-      throw new BadRequestException('Player not owned by user');
-    }
-
-    const updatedSession = await this.dataAdapter.update('penalty-sessions', sessionId, {
-      guestUserId: userId,
-      guestPlayerId: dto.playerId,
-      status: SessionStatus.IN_PROGRESS,
-      startedAt: new Date().toISOString(),
-    });
-
-    console.log(`Penalty session joined: ${sessionId} by user ${userId}`);
-
-    return updatedSession;
+    return session;
   }
 
-  async attemptPenalty(
-    sessionId: string,
-    userId: string,
-    dto: PenaltyAttemptDto,
-  ): Promise<{ isGoal: boolean; description: string; session: PenaltySession }> {
-    const session = await this.dataAdapter.findById('penalty-sessions', sessionId);
-    if (!session) {
-      throw new NotFoundException('Session not found');
+  async attemptPenalty(sessionId: string, attemptData: any, userId: string) {
+    const session = await this.getSessionDetails(sessionId, userId);
+    
+    if (session.status !== 'in_progress') {
+      throw new BadRequestException('Session is not active');
     }
 
-    if (session.status !== SessionStatus.IN_PROGRESS) {
-      throw new BadRequestException('Session is not in progress');
+    // Validate attempt data
+    if (!['left', 'center', 'right'].includes(attemptData.direction)) {
+      throw new BadRequestException('Invalid penalty direction');
+    }
+    
+    if (attemptData.power < 0 || attemptData.power > 100) {
+      throw new BadRequestException('Invalid penalty power');
     }
 
-    // Generate outcome using simple algorithm
-    const outcome = this.calculatePenaltyOutcome(session, dto, userId);
-
+    // Calculate penalty result
+    const power = attemptData.power || 75;
+    const direction = attemptData.direction;
+    const keeperDirection = this.getAIKeeperDirection();
+    const isGoal = this.calculatePenaltyResult(direction, keeperDirection, power);
+    
     // Record attempt
-    await this.dataAdapter.create('penalty-attempts', {
+    await this.attemptRepository.save({
       sessionId,
       round: session.currentRound,
       shooterUserId: userId,
-      goalkeeperId: session.type === SessionType.SINGLE_PLAYER ? 'ai' : 
-                   (userId === session.hostUserId ? session.guestUserId! : session.hostUserId),
-      shooterPlayerId: userId === session.hostUserId ? session.hostPlayerId : session.guestPlayerId!,
-      goalkeeperPlayerId: session.type === SessionType.SINGLE_PLAYER ? 'ai_goalkeeper' :
-                         (userId === session.hostUserId ? session.guestPlayerId! : session.hostPlayerId),
-      direction: dto.direction,
-      power: dto.power,
-      keeperDirection: this.generateKeeperDirection(session.seed, session.currentRound),
-      isGoal: outcome.isGoal,
-      attemptedAt: new Date().toISOString(),
-      seed: this.generateAttemptSeed(session.seed, session.currentRound, userId),
+      goalkeeperId: 'ai',
+      shooterPlayerId: session.hostPlayerId,
+      goalkeeperPlayerId: 'ai_goalkeeper',
+      direction,
+      power,
+      keeperDirection,
+      isGoal,
+      attemptedAt: new Date(),
+      seed: uuidv4(),
     });
 
     // Update session score
-    const scoreUpdate = outcome.isGoal ? 1 : 0;
-    let updatedSession: PenaltySession;
+    const newHostScore = session.hostScore + (isGoal ? 1 : 0);
+    const newRound = session.currentRound + 1;
+    const isCompleted = newRound > session.maxRounds;
 
-    if (userId === session.hostUserId) {
-      updatedSession = await this.dataAdapter.update('penalty-sessions', sessionId, {
-        hostScore: session.hostScore + scoreUpdate,
-        currentRound: session.currentRound + 1,
-      });
-    } else {
-      updatedSession = await this.dataAdapter.update('penalty-sessions', sessionId, {
-        guestScore: session.guestScore + scoreUpdate,
-        currentRound: session.currentRound + 1,
-      });
+    let winnerId = null;
+    if (isCompleted) {
+      if (newHostScore > session.guestScore) {
+        winnerId = userId;
+      } else if (session.guestScore > newHostScore) {
+        winnerId = session.type === 'single_player' ? 'ai' : session.guestUserId;
+      }
     }
 
-    // Check if session is complete
-    if (updatedSession.currentRound > updatedSession.maxRounds) {
-      const winnerId = updatedSession.hostScore > updatedSession.guestScore 
-        ? updatedSession.hostUserId 
-        : updatedSession.guestScore > updatedSession.hostScore 
-          ? updatedSession.guestUserId 
-          : undefined;
-
-      await this.dataAdapter.update('penalty-sessions', sessionId, {
-        status: SessionStatus.COMPLETED,
-        winnerId,
-        completedAt: new Date().toISOString(),
-      });
-    }
-
-    console.log(`Penalty attempt: ${sessionId} by user ${userId}, goal: ${outcome.isGoal}`);
-
-    return {
-      isGoal: outcome.isGoal,
-      description: outcome.description,
-      session: updatedSession,
-    };
-  }
-
-  private calculatePenaltyOutcome(
-    session: PenaltySession,
-    attempt: PenaltyAttemptDto,
-    userId: string,
-  ): { isGoal: boolean; description: string } {
-    // NUEVA LÓGICA: Usar fórmula canónica exacta
-    const keeperDirection = this.generateKeeperDirection(session.seed, session.currentRound);
-    
-    // 1. Obtener stats reales del jugador y su división
-    const playerStats = this.getPlayerStatsForPenalty(session, userId);
-    const playerDivision = this.getPlayerDivisionString(session, userId);
-    
-    // 2. Calcular chance base usando fórmula canónica
-    let baseChance = this.penaltyProbabilityService.computeChance(playerStats, playerDivision);
-    
-    // 3. Aplicar modificadores adicionales (manteniendo la esencia del juego)
-    let finalChance = baseChance;
-    
-    // Factor de potencia del disparo
-    if (attempt.power < 50) {
-      finalChance = Math.floor(finalChance * 0.8); // Muy suave = menos efectivo
-    } else if (attempt.power > 90) {
-      finalChance = Math.floor(finalChance * 0.6); // Muy fuerte = menos control
-    }
-    
-    // Factor de dirección vs portero (el más importante)
-    if (attempt.direction === keeperDirection) {
-      finalChance = Math.floor(finalChance * 0.3); // Portero adivina = reduce drásticamente
-    }
-    
-    // Asegurar que esté en rango [5, 95]
-    finalChance = Math.max(5, Math.min(95, finalChance));
-    
-    // 4. Decisión final usando roll [1..100]
-    const isGoal = this.penaltyProbabilityService.decidePenalty(playerStats, playerDivision);
-
-    const description = isGoal
-      ? `Goal! The ball flies into the ${attempt.direction} corner with ${attempt.power}% power!`
-      : attempt.direction === keeperDirection
-        ? `Saved! The goalkeeper dives ${keeperDirection} and makes a fantastic save!`
-        : `¡Fallo! El disparo se va ${attempt.power > 90 ? 'alto' : 'desviado'} mientras el portero se lanza hacia ${keeperDirection}!`;
-    
-    // Log detallado para debugging
-    const details = this.penaltyProbabilityService.getCalculationDetails(playerStats, playerDivision);
-    console.log(`Penalty Calculation Details:`, {
-      player: { sumStats: details.sumSubstats, division: playerDivision },
-      probability: { base: baseChance, final: finalChance },
-      modifiers: { power: attempt.power, direction: attempt.direction, keeper: keeperDirection },
-      result: isGoal ? 'GOAL' : 'MISS'
+    await this.sessionRepository.update(sessionId, {
+      hostScore: newHostScore,
+      currentRound: isCompleted ? session.currentRound : newRound,
+      status: isCompleted ? 'completed' : 'in_progress',
+      completedAt: isCompleted ? new Date() : null,
+      winnerId: isCompleted ? winnerId : null,
     });
 
-    return { isGoal, description };
-  }
-
-  /**
-   * Obtiene las stats del jugador para cálculos de penalty
-   */
-  private getPlayerStatsForPenalty(session: PenaltySession, userId: string): PlayerStats {
-    // Obtener stats reales del jugador desde inventory
-    const playerDivision = this.getPlayerDivisionString(session, userId);
-    
-    // Obtener el nombre del jugador desde la sesión
-    const playerId = userId === session.hostUserId ? session.hostPlayerId : session.guestPlayerId!;
-    
-    // Buscar stats reales del jugador
-    const playerStats = this.getRealPlayerStats(playerId, playerDivision);
-    
-    if (playerStats) {
-      return playerStats;
-    }
-    
-    // Fallback: generar stats que sumen exactamente getStartingStats()
-    return this.generateFallbackStats(playerDivision);
-  }
-  
-  /**
-   * Obtiene stats reales del jugador desde los datos
-   */
-  private getRealPlayerStats(playerId: string, division: string): PlayerStats | null {
-    try {
-      // Buscar en datos reales de jugadores
-      const playerData = RealPlayersService.getPlayerByName(playerId);
-      if (!playerData) return null;
-      
-      const divisionKey = division.toLowerCase() === 'primera' ? 'first' :
-                         division.toLowerCase() === 'segunda' ? 'second' :
-                         division.toLowerCase() === 'tercera' ? 'third' : null;
-      
-      if (!divisionKey) return null;
-      
-      const stats = playerData.statsByDivision[divisionKey];
-      
-      return {
-        speed: stats.speed,
-        shooting: stats.shooting,
-        passing: stats.passing,
-        defending: stats.defense, // Mapear defense -> defending
-        goalkeeping: stats.goalkeeping,
-        overall: Math.floor((stats.speed + stats.shooting + stats.passing + stats.defense + stats.goalkeeping) / 5)
-      };
-      
-    } catch (error) {
-      console.error('Error getting real player stats:', error);
-      return null;
-    }
-  }
-  
-  /**
-   * Genera stats de fallback que sumen exactamente getStartingStats()
-   */
-  private generateFallbackStats(playerDivision: string): PlayerStats {
-    const divisionNumber = Division.fromString(playerDivision);
-    const division = new Division(divisionNumber);
-    const totalStats = division.getStartingStats();
-    
-    // Distribuir equitativamente
-    const avgStat = Math.floor(totalStats / 5);
-    const remainder = totalStats % 5;
-    
     return {
-      speed: avgStat,
-      shooting: avgStat + (remainder > 0 ? 1 : 0), // Distribuir remainder
-      passing: avgStat,
-      defending: avgStat,
-      goalkeeping: avgStat,
-      overall: avgStat
+      isGoal,
+      description: isGoal 
+        ? `¡Gol! El balón vuela hacia la esquina ${direction} con ${power}% de potencia!`
+        : `¡Parada! El portero adivina la dirección y detiene el balón.`,
+      round: session.currentRound,
+      hostScore: newHostScore,
+      guestScore: session.guestScore,
+      sessionStatus: isCompleted ? 'completed' : 'in_progress',
+      winnerId: isCompleted ? winnerId : null,
     };
   }
 
-  /**
-   * Obtiene la división del jugador como número
-   */
-  private getPlayerDivision(session: PenaltySession, userId: string): number {
-    // TODO: Obtener división real del jugador desde inventory
-    return Division.SECOND_DIVISION;
+  async joinSession(sessionId: string, playerId: string, userId: string) {
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId }
+    });
+    
+    if (!session || session.type !== 'multiplayer' || session.status !== 'waiting') {
+      throw new BadRequestException('Cannot join this session');
+    }
+
+    // Verify player ownership
+    const ownedPlayer = await this.ownedPlayerRepository.findOne({
+      where: { id: playerId, userId }
+    });
+    
+    if (!ownedPlayer) {
+      throw new ForbiddenException('Player not owned by user');
+    }
+
+    // Update session
+    await this.sessionRepository.update(sessionId, {
+      guestUserId: userId,
+      guestPlayerId: playerId,
+      status: 'in_progress',
+      startedAt: new Date(),
+    });
+
+    return this.sessionRepository.findOne({ where: { id: sessionId } });
   }
 
-  /**
-   * Obtiene la división del jugador como string
-   */
-  private getPlayerDivisionString(session: PenaltySession, userId: string): string {
-    const divisionNumber = this.getPlayerDivision(session, userId);
-    return Division.toString(divisionNumber);
-  }
-
-  private generateKeeperDirection(seed: string, round: number): PenaltyDirection {
-    const directions = Object.values(PenaltyDirection);
+  private getAIKeeperDirection(): string {
+    const directions = ['left', 'center', 'right'];
     return directions[Math.floor(Math.random() * directions.length)];
   }
 
-  private generateSessionSeed(userId: string, playerId: string): string {
-    return `${userId}-${playerId}-${Date.now()}`;
-  }
-
-  private generateAttemptSeed(sessionSeed: string, round: number, userId: string): string {
-    return `${sessionSeed}-${round}-${userId}`;
-  }
-
-  async findSessionById(id: string): Promise<PenaltySession> {
-    const session = await this.dataAdapter.findById('penalty-sessions', id);
-    if (!session) {
-      throw new NotFoundException('Session not found');
+  private calculatePenaltyResult(direction: string, keeperDirection: string, power: number): boolean {
+    if (direction !== keeperDirection) {
+      // Keeper goes wrong way - higher chance of goal
+      const baseChance = 0.75;
+      const powerBonus = (power / 100) * 0.2;
+      return Math.random() < (baseChance + powerBonus);
+    } else {
+      // Keeper guesses correctly - lower chance but still possible
+      const baseChance = 0.15;
+      const powerBonus = (power / 100) * 0.25;
+      return Math.random() < (baseChance + powerBonus);
     }
-    return session;
-  }
-
-  async findUserSessions(userId: string): Promise<PenaltySession[]> {
-    return this.dataAdapter.findWhere('penalty-sessions',
-      (s: PenaltySession) => s.hostUserId === userId || s.guestUserId === userId
-    );
-  }
-
-  async getSessionAttempts(sessionId: string): Promise<PenaltyAttempt[]> {
-    return this.dataAdapter.findWhere('penalty-attempts', (a: PenaltyAttempt) => a.sessionId === sessionId);
   }
 }

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Filter, Grid, List, SlidersHorizontal } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../services/api';
+import ApiService from '../services/api';
 import { FilterOptions } from '../types';
 import NFTGrid from '../components/nft/NFTGrid';
 
@@ -18,13 +18,19 @@ const ExplorePage = () => {
   // Fetch NFTs with filters
   const { data: nfts, isLoading, error, refetch } = useQuery({
     queryKey: ['nfts', filters, searchQuery],
-    queryFn: () => api.getNFTs(filters)
+    queryFn: () => {
+      // Mock implementation for now
+      return Promise.resolve([]);
+    }
   });
 
   // Search functionality
   const { data: searchResults } = useQuery({
     queryKey: ['search', searchQuery],
-    queryFn: () => api.search(searchQuery),
+    queryFn: () => {
+      // Mock implementation for now
+      return Promise.resolve({ nfts: [] });
+    },
     enabled: searchQuery.length > 2
   });
 

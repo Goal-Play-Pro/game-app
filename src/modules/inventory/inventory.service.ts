@@ -1,256 +1,246 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { DataAdapterService } from '../../common/services/data-adapter.service';
-import { Division } from '../../config/division.config';
-import { RealPlayersService, PlayerProgressionService } from '../../data/players.data';
-import PlayerProgressionService from '../../services/player-progression.service';
-import { OwnedPlayer, PlayerKit, PlayerProgression } from './entities/inventory.entity';
-import { UpdatePlayerKitDto } from './dto/inventory.dto';
-import { PlayerStats } from '../gacha/entities/gacha.entity';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { OwnedPlayer } from '../../database/entities/owned-player.entity';
+import { PlayerKit } from '../../database/entities/player-kit.entity';
+import { GachaPlayer } from '../../database/entities/gacha-player.entity';
 
 @Injectable()
 export class InventoryService {
-  constructor(private dataAdapter: DataAdapterService) {}
+  constructor(
+    @InjectRepository(OwnedPlayer)
+    private ownedPlayerRepository: Repository<OwnedPlayer>,
+    @InjectRepository(PlayerKit)
+    private playerKitRepository: Repository<PlayerKit>,
+    @InjectRepository(GachaPlayer)
+    private gachaPlayerRepository: Repository<GachaPlayer>,
+  ) {}
 
-  async addPlayerToInventory(
-    userId: string,
-    playerName: string,
-    division: string,
-    sourceOrderId?: string,
-    sourceDrawId?: string,
-  ): Promise<OwnedPlayer> {
-    const ownedPlayer = await this.dataAdapter.create('owned-players', {
-      userId,
-      playerName,
-      division,
-      sourceOrderId,
-      sourceDrawId,
-      acquiredAt: new Date().toISOString(),
-      currentLevel: 1,
-      experience: 0,
-      isActive: true,
+  async getOwnedPlayers(userId: string) {
+    return this.ownedPlayerRepository.find({
+      where: { userId, isActive: true },
+      relations: ['player'],
+      order: { createdAt: 'DESC' }
     });
-
-    // Create default kit
-    await this.dataAdapter.create('player-kits', {
-      ownedPlayerId: ownedPlayer.id,
-      version: 1,
-      name: `${playerName} Default Kit`,
-      primaryColor: '#FF0000',
-      secondaryColor: '#FFFFFF',
-      isActive: true,
-      equippedAt: new Date().toISOString(),
-    });
-
-    console.log(`Player acquired: ${playerName} (${division}) by user ${userId}`);
-
-    return ownedPlayer;
   }
 
-  async getUserPlayers(userId: string): Promise<OwnedPlayer[]> {
-    return this.dataAdapter.findWhere('owned-players', (p: OwnedPlayer) => p.userId === userId && p.isActive);
-  }
-
-  async getPlayerKit(ownedPlayerId: string, userId: string): Promise<PlayerKit> {
+  async getPlayerKit(ownedPlayerId: string, userId: string) {
     // Verify ownership
-    const ownedPlayer = await this.dataAdapter.findById('owned-players', ownedPlayerId);
-    if (!ownedPlayer || ownedPlayer.userId !== userId) {
-      throw new NotFoundException('Player not found');
+    const ownedPlayer = await this.ownedPlayerRepository.findOne({
+      where: { id: ownedPlayerId, userId }
+    });
+    
+    if (!ownedPlayer) {
+      throw new ForbiddenException('Player not owned by user');
     }
 
-    const kit = await this.dataAdapter.findOne('player-kits',
-      (k: PlayerKit) => k.ownedPlayerId === ownedPlayerId && k.isActive && !!k.equippedAt
-    );
+    let kit = await this.playerKitRepository.findOne({
+      where: { ownedPlayerId, isActive: true }
+    });
 
     if (!kit) {
-      throw new NotFoundException('Player kit not found');
+      // Create default kit
+      kit = await this.playerKitRepository.save({
+        ownedPlayerId,
+        version: 1,
+        name: 'Default Kit',
+        primaryColor: '#FF0000',
+        secondaryColor: '#FFFFFF',
+        isActive: true,
+        equippedAt: new Date(),
+      });
     }
 
     return kit;
   }
 
-  async updatePlayerKit(
-    ownedPlayerId: string,
-    userId: string,
-    dto: UpdatePlayerKitDto,
-  ): Promise<PlayerKit> {
+  async updatePlayerKit(ownedPlayerId: string, kitData: any, userId: string) {
     // Verify ownership
-    const ownedPlayer = await this.dataAdapter.findById('owned-players', ownedPlayerId);
-    if (!ownedPlayer || ownedPlayer.userId !== userId) {
-      throw new NotFoundException('Player not found');
+    const ownedPlayer = await this.ownedPlayerRepository.findOne({
+      where: { id: ownedPlayerId, userId }
+    });
+    
+    if (!ownedPlayer) {
+      throw new ForbiddenException('Player not owned by user');
     }
 
-    // Get current kit
-    const currentKit = await this.dataAdapter.findOne('player-kits',
-      (k: PlayerKit) => k.ownedPlayerId === ownedPlayerId && k.isActive && !!k.equippedAt
-    );
-
-    if (!currentKit) {
-      throw new NotFoundException('Current kit not found');
-    }
-
-    // Unequip current kit
-    await this.dataAdapter.update('player-kits', currentKit.id, {
-      isActive: false,
-      unequippedAt: new Date().toISOString(),
+    // Deactivate current kit
+    const currentKit = await this.playerKitRepository.findOne({
+      where: { ownedPlayerId, isActive: true }
     });
 
-    // Create new kit version
-    const newKit = await this.dataAdapter.create('player-kits', {
+    if (currentKit) {
+      await this.playerKitRepository.update(currentKit.id, {
+        isActive: false,
+        unequippedAt: new Date(),
+      });
+    }
+
+    // Create new kit
+    return this.playerKitRepository.save({
       ownedPlayerId,
-      version: currentKit.version + 1,
-      name: dto.name,
-      primaryColor: dto.primaryColor,
-      secondaryColor: dto.secondaryColor,
-      logoUrl: dto.logoUrl,
+      version: (currentKit?.version || 0) + 1,
+      name: kitData.name || 'Custom Kit',
+      primaryColor: kitData.primaryColor || '#FF0000',
+      secondaryColor: kitData.secondaryColor || '#FFFFFF',
+      logoUrl: kitData.logoUrl,
       isActive: true,
-      equippedAt: new Date().toISOString(),
+      equippedAt: new Date(),
     });
-
-    console.log(`Player kit updated: ${ownedPlayerId} by user ${userId}`);
-
-    return newKit;
   }
 
-  async getPlayerProgression(ownedPlayerId: string, userId: string): Promise<PlayerProgression> {
+  async getPlayerProgression(ownedPlayerId: string, userId: string) {
     // Verify ownership
-    const ownedPlayer = await this.dataAdapter.findById('owned-players', ownedPlayerId);
-    if (!ownedPlayer || ownedPlayer.userId !== userId) {
-      throw new NotFoundException('Player not found');
+    const ownedPlayer = await this.ownedPlayerRepository.findOne({
+      where: { id: ownedPlayerId, userId },
+      relations: ['player']
+    });
+    
+    if (!ownedPlayer) {
+      throw new ForbiddenException('Player not owned by user');
     }
 
-    // Usar el servicio de progresión con datos reales
-    const progressionData = PlayerProgressionService.getPlayerProgression(
-      ownedPlayerId,
-      ownedPlayer.playerName || 'Unknown Player',
-      ownedPlayer.division || 'tercera',
-      ownedPlayer.currentLevel,
-      ownedPlayer.experience
-    );
-
-    if (!progressionData) {
-      throw new NotFoundException('Player progression data not found');
+    // Get base player data
+    const basePlayer = ownedPlayer.player;
+    if (!basePlayer) {
+      throw new NotFoundException('Base player not found');
     }
 
-    // Convertir a formato esperado por la API
-    const baseStats: PlayerStats = {
-      ...progressionData.stats.base,
-      defending: progressionData.stats.base.defense, // Mapear defense -> defending
-      overall: Math.floor((
-        progressionData.stats.base.speed +
-        progressionData.stats.base.shooting +
-        progressionData.stats.base.passing +
-        progressionData.stats.base.defense +
-        progressionData.stats.base.goalkeeping
-      ) / 5)
+    // Parse baseStats if it's a string (SQLite compatibility)
+    const baseStats = typeof basePlayer.baseStats === 'string' 
+      ? JSON.parse(basePlayer.baseStats) 
+      : basePlayer.baseStats;
+
+    // Calculate progression
+    const level = ownedPlayer.currentLevel;
+    const experience = ownedPlayer.experience;
+    const requiredExperience = this.calculateRequiredXP(level + 1);
+
+    // Calculate bonuses (simple formula: +1 per 5 levels)
+    const levelBonus = Math.floor(level / 5);
+    const bonuses = {
+      speed: levelBonus,
+      shooting: levelBonus,
+      passing: levelBonus,
+      defending: levelBonus,
+      goalkeeping: levelBonus,
+      overall: levelBonus,
     };
 
-    const bonuses: PlayerStats = {
-      ...progressionData.stats.bonuses,
-      defending: progressionData.stats.bonuses.defense,
-      overall: Math.floor((
-        progressionData.stats.bonuses.speed +
-        progressionData.stats.bonuses.shooting +
-        progressionData.stats.bonuses.passing +
-        progressionData.stats.bonuses.defense +
-        progressionData.stats.bonuses.goalkeeping
-      ) / 5)
-    };
-
-    const totalStats: PlayerStats = {
-      ...progressionData.stats.current,
-      defending: progressionData.stats.current.defense,
-      overall: Math.floor((
-        progressionData.stats.current.speed +
-        progressionData.stats.current.shooting +
-        progressionData.stats.current.passing +
-        progressionData.stats.current.defense +
-        progressionData.stats.current.goalkeeping
-      ) / 5)
+    // Calculate total stats
+    const totalStats = {
+      speed: baseStats.speed + bonuses.speed,
+      shooting: baseStats.shooting + bonuses.shooting,
+      passing: baseStats.passing + bonuses.passing,
+      defending: baseStats.defending + bonuses.defending,
+      goalkeeping: baseStats.goalkeeping + bonuses.goalkeeping,
+      overall: Math.floor((baseStats.speed + baseStats.shooting + 
+                          baseStats.passing + baseStats.defending + 
+                          baseStats.goalkeeping + levelBonus * 5) / 5),
     };
 
     return {
       ownedPlayerId,
-      level: progressionData.currentLevel,
-      experience: progressionData.experience,
-      requiredExperience: progressionData.nextLevelRequirements.experienceNeeded,
+      level,
+      experience,
+      requiredExperience,
       stats: baseStats,
       bonuses,
       totalStats,
     };
   }
 
-  async addExperience(ownedPlayerId: string, amount: number): Promise<OwnedPlayer> {
-    const ownedPlayer = await this.dataAdapter.findById('owned-players', ownedPlayerId);
+  async getFarmingStatus(ownedPlayerId: string, userId: string) {
+    // Verify ownership
+    const ownedPlayer = await this.ownedPlayerRepository.findOne({
+      where: { id: ownedPlayerId, userId }
+    });
+    
     if (!ownedPlayer) {
-      throw new NotFoundException('Player not found');
+      throw new ForbiddenException('Player not owned by user');
     }
 
-    // Usar el servicio de progresión para manejar level ups
-    const result = PlayerProgressionService.addExperience(
-      ownedPlayer.playerName || 'Unknown Player',
-      ownedPlayer.division || 'tercera',
-      ownedPlayer.currentLevel,
-      ownedPlayer.experience,
-      amount
-    );
+    const requiredLevel = 5;
+    const requiredExperience = 500;
+    
+    const canPlay = ownedPlayer.currentLevel >= requiredLevel && ownedPlayer.experience >= requiredExperience;
+    const levelProgress = Math.min(ownedPlayer.currentLevel / requiredLevel, 1) * 50;
+    const xpProgress = Math.min(ownedPlayer.experience / requiredExperience, 1) * 50;
+    const farmingProgress = Math.floor(levelProgress + xpProgress);
 
-    return this.dataAdapter.update('owned-players', ownedPlayerId, {
-      currentLevel: result.newLevel,
-      experience: result.newExperience,
-    });
+    return {
+      canPlay,
+      farmingProgress,
+      reason: canPlay ? 'Player is ready to play' : 
+              ownedPlayer.currentLevel < requiredLevel ? `Need level ${requiredLevel} (current: ${ownedPlayer.currentLevel})` :
+              `Need ${requiredExperience} XP (current: ${ownedPlayer.experience})`,
+      requirements: {
+        level: {
+          current: ownedPlayer.currentLevel,
+          required: requiredLevel,
+          met: ownedPlayer.currentLevel >= requiredLevel,
+        },
+        experience: {
+          current: ownedPlayer.experience,
+          required: requiredExperience,
+          met: ownedPlayer.experience >= requiredExperience,
+        },
+      },
+    };
   }
 
-  /**
-   * Procesa una sesión de farming para un jugador
-   */
-  async processFarmingSession(
-    ownedPlayerId: string, 
-    userId: string,
-    farmingType: 'speed' | 'shooting' | 'passing' | 'defense' | 'goalkeeping' | 'general' = 'general'
-  ): Promise<{
-    success: boolean;
-    message: string;
-    experienceGained: number;
-    leveledUp: boolean;
-    newLevel: number;
-    canPlayNow: boolean;
-  }> {
+  async processFarmingSession(ownedPlayerId: string, farmingType: string, userId: string) {
     // Verify ownership
-    const ownedPlayer = await this.dataAdapter.findById('owned-players', ownedPlayerId);
-    if (!ownedPlayer || ownedPlayer.userId !== userId) {
-      throw new NotFoundException('Player not found');
+    const ownedPlayer = await this.ownedPlayerRepository.findOne({
+      where: { id: ownedPlayerId, userId }
+    });
+    
+    if (!ownedPlayer) {
+      throw new ForbiddenException('Player not owned by user');
     }
 
-    // Procesar sesión de farming
-    const farmingResult = PlayerProgressionService.processFarmingSession(
-      ownedPlayer.playerName || 'Unknown Player',
-      ownedPlayer.division || 'tercera',
-      ownedPlayer.currentLevel,
-      ownedPlayer.experience,
-      farmingType
-    );
+    // Calculate rewards based on farming type
+    const rewards = {
+      general: { xp: 25, cost: 5 },
+      speed: { xp: 30, cost: 8 },
+      shooting: { xp: 30, cost: 8 },
+      passing: { xp: 30, cost: 8 },
+      defense: { xp: 30, cost: 8 },
+      goalkeeping: { xp: 30, cost: 8 },
+    };
 
-    // Actualizar jugador en base de datos
-    await this.dataAdapter.update('owned-players', ownedPlayerId, {
-      currentLevel: farmingResult.newLevel,
-      experience: farmingResult.newExperience,
+    const reward = rewards[farmingType] || rewards.general;
+    const newExperience = ownedPlayer.experience + reward.xp;
+    const newLevel = this.calculateLevelFromXP(newExperience);
+
+    // Update player
+    await this.ownedPlayerRepository.update(ownedPlayerId, {
+      experience: newExperience,
+      currentLevel: Math.max(ownedPlayer.currentLevel, newLevel),
     });
-
-    // Verificar si ahora puede jugar
-    const playabilityCheck = PlayerProgressionService.canPlayerPlay(
-      farmingResult.newLevel,
-      farmingResult.newExperience
-    );
-
-    console.log(`Farming session completed for ${ownedPlayer.playerName}: +${farmingResult.experienceGained} XP`);
 
     return {
       success: true,
-      message: farmingResult.message,
-      experienceGained: farmingResult.experienceGained,
-      leveledUp: farmingResult.leveledUp,
-      newLevel: farmingResult.newLevel,
-      canPlayNow: playabilityCheck.canPlay
+      xpGained: reward.xp,
+      newExperience,
+      newLevel: Math.max(ownedPlayer.currentLevel, newLevel),
+      cost: reward.cost,
     };
+  }
+
+  private calculateRequiredXP(level: number): number {
+    return level * 100 + Math.pow(level, 2) * 10;
+  }
+
+  private calculateLevelFromXP(totalXP: number): number {
+    let level = 1;
+    let requiredXP = this.calculateRequiredXP(level);
+    
+    while (totalXP >= requiredXP && level < 100) {
+      level++;
+      requiredXP = this.calculateRequiredXP(level);
+    }
+    
+    return level - 1;
   }
 }

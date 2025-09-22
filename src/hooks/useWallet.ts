@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChainType } from '../types';
 import { useReferral } from './useReferral';
 
+
 interface WalletState {
   isConnected: boolean;
   address: string | null;
@@ -10,6 +11,7 @@ interface WalletState {
   isConnecting: boolean;
   error: string | null;
 }
+
 
 export const useWallet = () => {
   const { registerPendingReferral } = useReferral();
@@ -44,13 +46,24 @@ export const useWallet = () => {
       default: return ChainType.BSC; // Default to BSC
     }
   };
+  
+  const getNetworkName = (chainId: number): string => {
+    switch (chainId) {
+      case 1: return 'Ethereum';
+      case 137: return 'Polygon';
+      case 56: return 'BSC';
+      case 42161: return 'Arbitrum';
+      default: return 'Unknown';
+    }
+  };
 
   const checkConnection = useCallback(async () => {
-    if (!window.ethereum) return;
+    const ethereum = (window as any).ethereum;
+    if (!ethereum) return;
 
     try {
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const accounts = await ethereum.request({ method: 'eth_accounts' });
+      const chainId = await ethereum.request({ method: 'eth_chainId' });
       
       if (accounts.length > 0) {
         setWalletState({
@@ -68,7 +81,8 @@ export const useWallet = () => {
   }, []);
 
   const connectWallet = async () => {
-    if (!window.ethereum) {
+    const ethereum = (window as any).ethereum;
+    if (!ethereum) {
       setWalletState(prev => ({
         ...prev,
         error: 'MetaMask is not installed. Please install MetaMask to continue.',
@@ -80,24 +94,24 @@ export const useWallet = () => {
 
     try {
       // Request account access
-      const accounts = await window.ethereum.request({
+      const accounts = await ethereum.request({
         method: 'eth_requestAccounts',
       });
 
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const chainId = await ethereum.request({ method: 'eth_chainId' });
       const chainIdNumber = parseInt(chainId, 16);
 
       // Switch to BSC if not already on it
       if (chainIdNumber !== 56) {
         try {
-          await window.ethereum.request({
+          await ethereum.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: BSC_NETWORK.chainId }],
           });
         } catch (switchError: any) {
           // If BSC is not added to MetaMask, add it
           if (switchError.code === 4902) {
-            await window.ethereum.request({
+            await ethereum.request({
               method: 'wallet_addEthereumChain',
               params: [BSC_NETWORK],
             });
@@ -108,7 +122,7 @@ export const useWallet = () => {
       }
 
       // Get updated chain info after potential switch
-      const finalChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const finalChainId = await ethereum.request({ method: 'eth_chainId' });
       const finalChainIdNumber = parseInt(finalChainId, 16);
 
       setWalletState({
@@ -123,11 +137,15 @@ export const useWallet = () => {
       // Store connection in localStorage
       localStorage.setItem('walletConnected', 'true');
       localStorage.setItem('walletAddress', accounts[0]);
+      localStorage.setItem('walletChainId', finalChainIdNumber.toString());
 
       // Register pending referral if exists
       setTimeout(() => {
         registerPendingReferral();
       }, 1000);
+      
+      // Log de conexión exitosa
+      console.log(`✅ Wallet connected: ${accounts[0]} on ${getNetworkName(finalChainIdNumber)}`);
 
     } catch (error: any) {
       console.error('Error connecting wallet:', error);
@@ -152,20 +170,24 @@ export const useWallet = () => {
     // Clear localStorage
     localStorage.removeItem('walletConnected');
     localStorage.removeItem('walletAddress');
+    localStorage.removeItem('walletChainId');
+    
+    console.log('🔌 Wallet disconnected');
   };
 
   const switchToNetwork = async (targetChainId: number) => {
-    if (!window.ethereum) return;
+    const ethereum = (window as any).ethereum;
+    if (!ethereum) return;
 
     try {
-      await window.ethereum.request({
+      await ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: `0x${targetChainId.toString(16)}` }],
       });
     } catch (error: any) {
       if (error.code === 4902) {
         // Network not added, add BSC as default
-        await window.ethereum.request({
+        await ethereum.request({
           method: 'wallet_addEthereumChain',
           params: [BSC_NETWORK],
         });
@@ -176,7 +198,8 @@ export const useWallet = () => {
 
   // Listen for account and network changes
   useEffect(() => {
-    if (!window.ethereum) return;
+    const ethereum = (window as any).ethereum;
+    if (!ethereum) return;
 
     const handleAccountsChanged = (accounts: string[]) => {
       if (accounts.length === 0) {
@@ -199,25 +222,44 @@ export const useWallet = () => {
       }));
     };
 
-    window.ethereum.on('accountsChanged', handleAccountsChanged);
-    window.ethereum.on('chainChanged', handleChainChanged);
+    ethereum.on?.('accountsChanged', handleAccountsChanged);
+    ethereum.on?.('chainChanged', handleChainChanged);
 
     // Check if previously connected
     const wasConnected = localStorage.getItem('walletConnected');
+    const savedAddress = localStorage.getItem('walletAddress');
+    const savedChainId = localStorage.getItem('walletChainId');
+    
     if (wasConnected === 'true') {
       checkConnection();
+    } else if (savedAddress && savedChainId) {
+      // Restore from localStorage if available
+      setWalletState({
+        isConnected: true,
+        address: savedAddress,
+        chainId: parseInt(savedChainId),
+        chainType: getChainType(parseInt(savedChainId)),
+        isConnecting: false,
+        error: null,
+      });
     }
 
     return () => {
-      if (window.ethereum) {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      if (ethereum) {
+        ethereum.removeListener?.('accountsChanged', handleAccountsChanged);
+        ethereum.removeListener?.('chainChanged', handleChainChanged);
       }
     };
   }, [checkConnection]);
 
   return {
     ...walletState,
+    address: walletState.address,
+    chainId: walletState.chainId,
+    chainType: walletState.chainType,
+    isConnected: walletState.isConnected,
+    isConnecting: walletState.isConnecting,
+    error: walletState.error,
     connectWallet,
     disconnectWallet,
     switchToNetwork,

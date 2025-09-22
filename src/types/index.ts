@@ -94,6 +94,7 @@ export interface OwnedPlayer {
   id: string;
   userId: string;
   playerId: string;
+  division?: string;
   sourceOrderId?: string;
   sourceDrawId?: string;
   acquiredAt: string;
@@ -229,11 +230,6 @@ export enum SessionStatus {
   CANCELLED = 'cancelled',
 }
 
-export enum TransactionType {
-  DEBIT = 'debit',
-  CREDIT = 'credit',
-}
-
 export enum PenaltyDirection {
   LEFT = 'left',
   CENTER = 'center',
@@ -305,14 +301,6 @@ export interface LoadingState {
 }
 
 // MetaMask types
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: any[] }) => Promise<any>;
-      isMetaMask?: boolean;
-    };
-  }
-}
 
 export interface GameSession {
   id: string;

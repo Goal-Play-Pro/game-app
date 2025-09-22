@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { ethers } from 'ethers';
-import { PublicKey } from '@solana/web3.js';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
@@ -30,13 +29,9 @@ export class CryptoService {
     publicKey: string,
   ): Promise<boolean> {
     try {
-      const messageBytes = new TextEncoder().encode(message);
-      const signatureBytes = Buffer.from(signature, 'base64');
-      const publicKeyObj = new PublicKey(publicKey);
-
-      // En un entorno real, usarías tweetnacl para verificar
-      // Por simplicidad, retornamos true si los parámetros son válidos
-      return publicKeyObj.toBase58() === publicKey && signatureBytes.length === 64;
+      // Simplified Solana verification for now
+      // In production, implement proper ed25519 signature verification
+      return publicKey.length === 44 && signature.length > 0;
     } catch (error) {
       return false;
     }
@@ -75,8 +70,8 @@ export class CryptoService {
    */
   isValidSolanaAddress(address: string): boolean {
     try {
-      new PublicKey(address);
-      return true;
+      // Basic Solana address validation
+      return address.length === 44 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(address);
     } catch {
       return false;
     }

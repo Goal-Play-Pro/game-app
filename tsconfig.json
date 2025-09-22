@@ -20,11 +20,11 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@common/*": ["src/common/*"],
-      "@modules/*": ["src/modules/*"]
+      "@common/*": ["src/common/*"]
     }
   },
   "include": [
@@ -36,19 +36,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    "build",
-    "src/modules/**/*.ts",
-    "src/common/guards/**/*.ts",
-    "src/common/services/**/*.ts",
-    "src/common/decorators/**/*.ts",
-    "src/common/filters/**/*.ts",
-    "src/common/interceptors/**/*.ts",
-    "src/common/middleware/**/*.ts",
-    "src/common/data-store/**/*.ts",
-    "src/app.controller.ts",
-    "src/app.service.ts",
-    "src/app.module.ts",
-    "src/main.ts"
+    "build"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

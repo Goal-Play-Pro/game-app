@@ -12,7 +12,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ReferralApiService } from '../../services/referral.api';
+import ApiService from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ReferralLink from './ReferralLink';
 
@@ -23,28 +23,14 @@ const ReferralDashboard = () => {
   // Fetch referral stats
   const { data: referralStats, isLoading: statsLoading, error: statsError } = useQuery({
     queryKey: ['referral-stats'],
-    queryFn: () => {
-      try {
-        return ReferralApiService.getReferralStats();
-      } catch (error) {
-        console.warn('Referral stats not available');
-        return null;
-      }
-    },
+    queryFn: () => ApiService.getReferralStats(),
     retry: false,
   });
 
   // Fetch user's referral code
   const { data: referralCode, isLoading: codeLoading } = useQuery({
     queryKey: ['my-referral-code'],
-    queryFn: () => {
-      try {
-        return ReferralApiService.getMyReferralCode();
-      } catch (error) {
-        console.warn('Referral code not available');
-        return null;
-      }
-    },
+    queryFn: () => ApiService.getMyReferralCode(),
     retry: false,
   });
 
@@ -53,7 +39,7 @@ const ReferralDashboard = () => {
     mutationFn: async (customCode?: string) => {
       console.log('🚀 Starting referral code creation...');
       try {
-        const result = await ReferralApiService.createReferralCode(customCode);
+        const result = await ApiService.createReferralCode(customCode);
         console.log('✅ Referral code creation successful:', result);
         return result;
       } catch (error) {
@@ -109,7 +95,7 @@ const ReferralDashboard = () => {
     }
   };
 
-  if (statsLoading || codeLoading) {
+  if (statsLoading) {
     return (
       <div className="glass-dark rounded-xl p-6">
         <div className="flex justify-center items-center py-12">
@@ -120,7 +106,7 @@ const ReferralDashboard = () => {
   }
 
   // If no referral code exists, show creation interface
-  if (!referralCode && !statsError) {
+  if (!referralCode) {
     return (
       <div className="glass-dark rounded-xl p-8 text-center">
         <div className="w-16 h-16 bg-gradient-to-r from-football-green to-football-blue rounded-full flex items-center justify-center mx-auto mb-6">
@@ -135,9 +121,8 @@ const ReferralDashboard = () => {
         </p>
         
         <button
-          onClick={() => createCodeMutation.mutate(undefined)}
           disabled={createCodeMutation.isPending}
-          className="btn-primary flex items-center space-x-2 mx-auto"
+          className="btn-primary flex items-center space-x-2 mx-auto disabled:opacity-50"
         >
           {createCodeMutation.isPending ? (
             <LoadingSpinner size="sm" color="white" />
@@ -147,29 +132,6 @@ const ReferralDashboard = () => {
               <span>Generate Referral Code</span>
             </>
           )}
-        </button>
-      </div>
-    );
-  }
-
-  if (statsError) {
-    return (
-      <div className="glass-dark rounded-xl p-8 text-center">
-        <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Users className="w-8 h-8 text-red-500" />
-        </div>
-        <h3 className="text-xl font-semibold text-white mb-2">
-          Referral System Not Available
-        </h3>
-        <p className="text-gray-400 mb-6">
-          Create your referral code to start earning commissions
-        </p>
-        <button
-          onClick={() => createCodeMutation.mutate(undefined)}
-          disabled={createCodeMutation.isPending}
-          className="btn-primary"
-        >
-          Create Referral Code
         </button>
       </div>
     );

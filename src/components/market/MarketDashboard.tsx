@@ -20,18 +20,24 @@ const MarketDashboard = () => {
     queryKey: ['market-data'],
     queryFn: ApiService.getMarketData,
     refetchInterval: 30000, // Refresh every 30 seconds
+    retry: 1,
+    retryDelay: 1000,
   });
 
   const { data: globalStats, isLoading: statsLoading } = useQuery({
     queryKey: ['global-statistics'],
     queryFn: ApiService.getGlobalStatistics,
     refetchInterval: 60000, // Refresh every minute
+    retry: 1,
+    retryDelay: 1000,
   });
 
   const { data: systemHealth } = useQuery({
     queryKey: ['system-health'],
     queryFn: ApiService.getSystemHealth,
     refetchInterval: 10000, // Refresh every 10 seconds
+    retry: 1,
+    retryDelay: 1000,
   });
 
   const formatCurrency = (amount: number | string) => {

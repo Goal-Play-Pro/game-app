@@ -1,81 +1,63 @@
-import axios from 'axios';
-import { ReferralStatsDto, ReferralCodeDto, ReferralCommissionDto, ReferralRegistrationDto } from '../types/referral';
-
-const API_BASE_URL = 'http://localhost:3001';
-
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Request interceptor to add auth token
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
+// Referral API Service - Mock implementation for development
 export class ReferralApiService {
-  // Get user's referral code
-  static async getMyReferralCode(): Promise<ReferralCodeDto | null> {
-    try {
-      const response = await apiClient.get('/referral/my-code');
-      return response.data;
-    } catch (error) {
-      console.warn('No referral code found');
-      return null;
-    }
+  static async getMyReferralCode() {
+    console.log('📝 Mock: Getting referral code');
+    return {
+      id: 'mock-code-1',
+      userId: 'mock-user',
+      walletAddress: '0x742d35Cc...',
+      code: 'DEMO123',
+      isActive: true,
+      totalReferrals: 0,
+      totalCommissions: '0.00',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
   }
 
-  // Create referral code
-  static async createReferralCode(customCode?: string): Promise<ReferralCodeDto> {
-    const response = await apiClient.post('/referral/create-code', {
-      customCode
-    });
-    return response.data;
+  static async createReferralCode(customCode?: string) {
+    console.log('📝 Mock: Creating referral code:', customCode);
+    return {
+      id: 'mock-code-new',
+      userId: 'mock-user',
+      walletAddress: '0x742d35Cc...',
+      code: customCode || 'DEMO123',
+      isActive: true,
+      totalReferrals: 0,
+      totalCommissions: '0.00',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
   }
 
-  // Register with referral code
-  static async registerReferral(referralCode: string): Promise<{ success: boolean; message: string }> {
-    const response = await apiClient.post('/referral/register', {
-      referralCode
-    });
-    return response.data;
+  static async getReferralStats() {
+    console.log('📝 Mock: Getting referral stats');
+    return {
+      totalReferrals: 0,
+      activeReferrals: 0,
+      totalCommissions: '0.00',
+      pendingCommissions: '0.00',
+      paidCommissions: '0.00',
+      thisMonthCommissions: '0.00',
+      referralLink: 'https://goalplay.pro?ref=DEMO123',
+      recentReferrals: [],
+      recentCommissions: []
+    };
   }
 
-  // Get referral statistics
-  static async getReferralStats(): Promise<ReferralStatsDto> {
-    const response = await apiClient.get('/referral/stats');
-    return response.data;
+  static async registerReferral(referralCode: string) {
+    console.log('📝 Mock: Registering referral:', referralCode);
+    return {
+      success: true,
+      message: 'Referral registered successfully'
+    };
   }
 
-  // Get referral commissions
-  static async getCommissions(): Promise<ReferralCommissionDto[]> {
-    const response = await apiClient.get('/referral/commissions');
-    return response.data;
-  }
-
-  // Get user's referrals
-  static async getMyReferrals(): Promise<ReferralRegistrationDto[]> {
-    const response = await apiClient.get('/referral/my-referrals');
-    return response.data;
-  }
-
-  // Validate referral code
-  static async validateReferralCode(code: string): Promise<{ valid: boolean; referrerWallet?: string }> {
-    const response = await apiClient.get(`/referral/validate/${code}`);
-    return response.data;
+  static async validateReferralCode(code: string) {
+    console.log('📝 Mock: Validating referral code:', code);
+    return {
+      valid: true,
+      referrerWallet: '0x742d35Cc...'
+    };
   }
 }
-
-export default ReferralApiService;

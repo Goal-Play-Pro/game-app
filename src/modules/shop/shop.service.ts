@@ -1,65 +1,47 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { getBasePrice } from '../../config/pricing.config';
-import { DataAdapterService } from '../../common/services/data-adapter.service';
-import { Product, ProductVariant } from './entities/product.entity';
-import { CreateProductDto, CreateProductVariantDto } from './dto/shop.dto';
-import { Division, ProductType } from '../../common/types/base.types';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Product } from '../../database/entities/product.entity';
+import { ProductVariant } from '../../database/entities/product-variant.entity';
 
 @Injectable()
 export class ShopService {
-  constructor(private dataAdapter: DataAdapterService) {}
+  constructor(
+    @InjectRepository(Product)
+    private productRepository: Repository<Product>,
+    @InjectRepository(ProductVariant)
+    private variantRepository: Repository<ProductVariant>,
+  ) {}
 
-  async findAllProducts(): Promise<Product[]> {
-    const products = await this.dataAdapter.findAll<Product>('products');
-    return products.filter((p: Product) => p.isActive);
+  async getProducts() {
+    return this.productRepository.find({
+      where: { isActive: true },
+      order: { createdAt: 'ASC' }
+    });
   }
-
-  async findProductById(id: string): Promise<Product> {
-    const product = await this.dataAdapter.findById<Product>('products', id);
-    if (!product || !product.isActive) {
-      throw new NotFoundException('Product not found');
+  
+  async getProductById(productId: string) {
+    const product = await this.productRepository.findOne({
+      where: { id: productId, isActive: true }
+    });
+    
+    if (!product) {
+      throw new NotFoundException(`Product with ID ${productId} not found`);
     }
+    
     return product;
   }
 
-  async findProductVariants(productId: string): Promise<ProductVariant[]> {
-    const product = await this.findProductById(productId);
-    const variants = await this.dataAdapter.findAll<ProductVariant>('product-variants');
-    return variants.filter((v: ProductVariant) => v.productId === productId && v.isActive);
-  }
-
-  async findVariantById(id: string): Promise<ProductVariant> {
-    const variant = await this.dataAdapter.findById<ProductVariant>('product-variants', id);
-    if (!variant || !variant.isActive) {
-      throw new NotFoundException('Product variant not found');
-    }
-    return variant;
-  }
-
-  async createProduct(dto: CreateProductDto): Promise<Product> {
-    return this.dataAdapter.create('products', {
-      ...dto,
-      isActive: dto.isActive ?? true,
-    });
-  }
-
-  async createProductVariant(productId: string, dto: CreateProductVariantDto): Promise<ProductVariant> {
-    await this.findProductById(productId); // Validate product exists
+  async getProductVariants(productId: string) {
+    // Verify product exists
+    await this.getProductById(productId);
     
-    // Validate price matches the expected price for division and level
-    const expectedPrice = getBasePrice(dto.division, dto.level);
-    const providedPrice = parseFloat(dto.priceUSDT);
-    
-    if (Math.abs(providedPrice - expectedPrice) > 0.01) {
-      throw new BadRequestException(
-        `Invalid price. Expected $${expectedPrice} for ${dto.division} division level ${dto.level}, got $${providedPrice}`
-      );
-    }
-    
-    return this.dataAdapter.create('product-variants', {
-      ...dto,
-      productId,
-      isActive: dto.isActive ?? true,
+    return this.variantRepository.find({
+      where: { 
+        productId, 
+        isActive: true 
+      },
+      order: { level: 'ASC' }
     });
   }
 }

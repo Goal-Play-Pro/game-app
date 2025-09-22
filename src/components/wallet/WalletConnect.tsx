@@ -35,7 +35,8 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
     lg: 'w-6 h-6'
   };
 
-  const formatAddress = (addr: string) => {
+  const formatAddress = (addr: string | null) => {
+    if (!addr) return '';
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
@@ -152,6 +153,7 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 10, scale: 0.95 }}
           className="absolute top-full right-0 mt-2 w-80 glass-dark rounded-xl border border-white/20 shadow-xl z-50"
+          onMouseLeave={() => setIsDropdownOpen(false)}
         >
           <div className="p-4">
             {/* Wallet Info */}

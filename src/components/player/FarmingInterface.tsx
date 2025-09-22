@@ -133,6 +133,8 @@ const FarmingInterface = ({
     return 'text-red-400';
   };
 
+  const isTraining = farmingMutation.isPending;
+
   if (statusLoading) {
     return (
       <div className={`glass-dark rounded-xl p-6 ${className}`}>
@@ -292,10 +294,10 @@ const FarmingInterface = ({
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleStartTraining}
-          disabled={farmingMutation.isPending || farmingStatus?.canPlay}
+          disabled={isTraining || farmingStatus?.canPlay}
           className="btn-primary flex items-center space-x-2 mx-auto disabled:opacity-50"
         >
-          {farmingMutation.isPending ? (
+          {isTraining ? (
             <LoadingSpinner size="sm" color="white" />
           ) : farmingStatus?.canPlay ? (
             <>

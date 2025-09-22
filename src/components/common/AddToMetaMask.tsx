@@ -21,8 +21,10 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
   };
 
   const addTokenToMetaMask = async () => {
-    if (!window.ethereum) {
+    const ethereum = (window as any).ethereum;
+    if (!ethereum) {
       setAddStatus('error');
+      console.error('❌ MetaMask not detected');
       return;
     }
 
@@ -30,20 +32,26 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
     setAddStatus('idle');
 
     try {
+      console.log('🦊 Adding GOAL token to MetaMask...');
+      
       // Check if we're on BSC network
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const chainId = await ethereum.request({ method: 'eth_chainId' });
+      console.log(`🔗 Current chain ID: ${chainId}`);
       
       if (chainId !== '0x38') { // BSC Mainnet chain ID
+        console.log('🔄 Switching to BSC network...');
         // Switch to BSC network first
         try {
-          await window.ethereum.request({
+          await ethereum.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: '0x38' }],
           });
+          console.log('✅ Switched to BSC successfully');
         } catch (switchError: any) {
           // If BSC is not added to MetaMask, add it
           if (switchError.code === 4902) {
-            await window.ethereum.request({
+            console.log('➕ Adding BSC network to MetaMask...');
+            await ethereum.request({
               method: 'wallet_addEthereumChain',
               params: [{
                 chainId: '0x38',
@@ -57,6 +65,7 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
                 blockExplorerUrls: ['https://bscscan.com/'],
               }],
             });
+            console.log('✅ BSC network added successfully');
           } else {
             throw switchError;
           }
@@ -64,7 +73,8 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
       }
 
       // Add token to MetaMask
-      const result = await window.ethereum.request({
+      console.log('🪙 Adding GOAL token with details:', tokenInfo);
+      const result = await ethereum.request({
         method: 'wallet_watchAsset',
         params: [{
           type: 'ERC20',
@@ -89,10 +99,10 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
       setAddStatus('error');
       
       // Try without image if image causes issues
-      if (error.message?.includes('image') || error.code === -32602) {
+      if ((error as any).message?.includes('image') || (error as any).code === -32602) {
         try {
           console.log('🔄 Retrying without image...');
-          const result = await window.ethereum.request({
+          const result = await ethereum.request({
             method: 'wallet_watchAsset',
             params: [{
               type: 'ERC20',
@@ -252,9 +262,9 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
             className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-center"
           >
             <p className="text-red-400 text-sm">
-              ❌ Error al añadir el token. {!window.ethereum ? 'Instala MetaMask primero.' : 'Inténtalo de nuevo.'}
+              ❌ Error al añadir el token. {!(window as any).ethereum ? 'Instala MetaMask primero.' : 'Inténtalo de nuevo.'}
             </p>
-            {!window.ethereum && (
+            {!(window as any).ethereum && (
               <a
                 href="https://metamask.io/download/"
                 target="_blank"

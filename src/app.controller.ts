@@ -20,6 +20,8 @@ export class AppController {
         description: { type: 'string' },
         status: { type: 'string' },
         timestamp: { type: 'string' },
+        environment: { type: 'string' },
+        storageMode: { type: 'string' },
         endpoints: {
           type: 'object',
           properties: {

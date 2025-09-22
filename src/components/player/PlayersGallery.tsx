@@ -23,7 +23,16 @@ const PlayersGallery = ({
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Get players for current division
-  const divisionPlayers = RealPlayersService.getPlayersForDivision(division);
+  const divisionPlayers = REAL_PLAYERS_DATA.filter(player => {
+    const divisionMap = {
+      'primera': 'First',
+      'segunda': 'Second', 
+      'tercera': 'Third'
+    };
+    
+    const targetDivision = divisionMap[division.toLowerCase()] || division;
+    return player.divisions.includes(targetDivision);
+  });
 
   // Apply filters
   const filteredPlayers = divisionPlayers.filter(player => {

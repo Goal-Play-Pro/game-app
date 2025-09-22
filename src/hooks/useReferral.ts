@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ReferralApiService } from '../services/referral.api';
+import ApiService from '../services/api';
 
 export const useReferral = () => {
   const queryClient = useQueryClient();
 
   // Register referral mutation
   const registerReferralMutation = useMutation({
-    mutationFn: (referralCode: string) => ReferralApiService.registerReferral(referralCode),
+    mutationFn: (referralCode: string) => ApiService.registerReferral(referralCode),
     onSuccess: (data) => {
       if (data.success) {
         console.log('✅ Referral registered successfully');
@@ -52,8 +52,7 @@ export const useReferral = () => {
   // Function to validate referral code
   const validateReferralCode = async (code: string) => {
     try {
-      const result = await ReferralApiService.validateReferralCode(code);
-      return result;
+      return await ApiService.validateReferralCode(code);
     } catch (error) {
       console.error('Error validating referral code:', error);
       return { valid: false };
@@ -61,7 +60,6 @@ export const useReferral = () => {
   };
 
   return {
-    registerReferralMutation,
     registerPendingReferral,
     validateReferralCode,
   };

@@ -15,6 +15,7 @@ import AboutPage from './pages/AboutPage'
 import TokenomicsPage from './pages/TokenomicsPage'
 import RoadmapPage from './pages/RoadmapPage'
 import VideosPage from './pages/VideosPage'
+import AdminPage from './pages/AdminPage'
 import AIAgent from './components/ai/AIAgent'
 
 function App() {
@@ -151,6 +152,17 @@ function App() {
                   transition={{ duration: 0.3 }}
                 >
                   <VideosPage />
+                </motion.div>
+              } />
+              
+              <Route path="/admin" element={
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <AdminPage />
                 </motion.div>
               } />
             </Routes>

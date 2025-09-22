@@ -1,266 +1,314 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { DataAdapterService } from '../../common/services/data-adapter.service';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ReferralCode } from '../../database/entities/referral-code.entity';
+import { ReferralRegistration } from '../../database/entities/referral-registration.entity';
+import { ReferralCommission } from '../../database/entities/referral-commission.entity';
+import { User } from '../../database/entities/user.entity';
+import { Order } from '../../database/entities/order.entity';
 import { LedgerService } from '../ledger/ledger.service';
-import { ReferralCode, ReferralRegistration, ReferralCommission } from './entities/referral.entity';
-import { CreateReferralCodeDto, RegisterReferralDto, ReferralStatsDto } from './dto/referral.dto';
 
 @Injectable()
 export class ReferralService {
+  private readonly logger = new Logger(ReferralService.name);
   private readonly COMMISSION_PERCENTAGE = 5; // 5% commission
-  private readonly baseUrl: string;
 
   constructor(
-    private dataAdapter: DataAdapterService,
+    @InjectRepository(ReferralCode)
+    private referralCodeRepository: Repository<ReferralCode>,
+    @InjectRepository(ReferralRegistration)
+    private referralRegistrationRepository: Repository<ReferralRegistration>,
+    @InjectRepository(ReferralCommission)
+    private referralCommissionRepository: Repository<ReferralCommission>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    @InjectRepository(Order)
+    private orderRepository: Repository<Order>,
     private ledgerService: LedgerService,
-    private configService: ConfigService,
-  ) {
-    this.baseUrl = this.configService.get<string>('APP_URI') || 'http://localhost:5173';
+  ) {}
+
+  async getMyReferralCode(userId: string) {
+    return this.referralCodeRepository.findOne({
+      where: { userId }
+    });
   }
 
-  async createReferralCode(userId: string, walletAddress: string, customCode?: string): Promise<ReferralCode> {
-    // Check if user already has a referral code
-    try {
-      const existingCode = await this.dataAdapter.findOne('referral-codes', 
-        (code: ReferralCode) => code.userId === userId && code.isActive
-      );
+  async createReferralCode(userId: string, customCode?: string) {
+    // Check if user already has a code
+    const existingCode = await this.referralCodeRepository.findOne({
+      where: { userId }
+    });
 
-      if (existingCode) {
-        console.log(`Existing referral code found for user ${userId}: ${existingCode.code}`);
-        return existingCode;
-      }
-
-      // Generate unique code
-      let code = customCode || this.generateReferralCode(walletAddress);
-      
-      // Ensure code is unique
-      const codeExists = await this.dataAdapter.findOne('referral-codes', 
-        (rc: ReferralCode) => rc.code === code && rc.isActive
-      );
-
-      if (codeExists) {
-        if (customCode) {
-          throw new BadRequestException('Custom referral code already exists');
-        }
-        code = this.generateReferralCode(walletAddress, true);
-      }
-
-      console.log(`Creating referral code: ${code} for user ${userId} with wallet ${walletAddress}`);
-
-      const referralCode = await this.dataAdapter.create('referral-codes', {
-        userId,
-        walletAddress: walletAddress.toLowerCase(),
-        code,
-        isActive: true,
-        totalReferrals: 0,
-        totalCommissions: '0.00',
-      });
-
-      console.log(`✅ Referral code created successfully: ${code} for user ${userId}`);
-      return referralCode;
-      
-    } catch (error) {
-      console.error(`❌ Error creating referral code for user ${userId}:`, error);
-      throw error;
+    if (existingCode) {
+      throw new ConflictException('User already has a referral code');
     }
+
+    // Get user info
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Generate code
+    const code = customCode || this.generateReferralCode(user.walletAddress);
+
+    // Check if code is already taken
+    const codeExists = await this.referralCodeRepository.findOne({
+      where: { code }
+    });
+
+    if (codeExists) {
+      throw new ConflictException('Referral code already exists');
+    }
+
+    // Create referral code
+    const referralCode = await this.referralCodeRepository.save({
+      userId,
+      walletAddress: user.walletAddress,
+      code,
+      isActive: true,
+      totalReferrals: 0,
+      totalCommissions: '0',
+    });
+
+    this.logger.log(`🔗 Referral code created: ${code} for user ${userId}`);
+    return referralCode;
   }
 
-  async registerReferral(referredUserId: string, referredWallet: string, referralCode: string): Promise<ReferralRegistration | null> {
+  async registerReferral(userId: string, referralCode: string) {
     // Find referral code
-    const referralCodeData = await this.dataAdapter.findOne('referral-codes', 
-      (code: ReferralCode) => code.code === referralCode && code.isActive
-    );
+    const referralCodeRecord = await this.referralCodeRepository.findOne({
+      where: { code: referralCode, isActive: true }
+    });
 
-    if (!referralCodeData) {
-      console.log(`Invalid referral code: ${referralCode}`);
-      return null;
+    if (!referralCodeRecord) {
+      throw new NotFoundException('Invalid referral code');
     }
 
     // Check if user is trying to refer themselves
-    if (referralCodeData.userId === referredUserId) {
-      console.log(`User trying to refer themselves: ${referredUserId}`);
-      return null;
+    if (referralCodeRecord.userId === userId) {
+      throw new ConflictException('Cannot refer yourself');
     }
 
-    // Check if user is already referred by someone
-    const existingReferral = await this.dataAdapter.findOne('referral-registrations', 
-      (reg: ReferralRegistration) => reg.referredUserId === referredUserId && reg.isActive
-    );
+    // Check if user is already referred
+    const existingRegistration = await this.referralRegistrationRepository.findOne({
+      where: { referredUserId: userId }
+    });
 
-    if (existingReferral) {
-      console.log(`User already referred: ${referredUserId}`);
-      return existingReferral;
+    if (existingRegistration) {
+      throw new ConflictException('User already registered with a referral code');
     }
 
-    // Create referral registration
-    const registration = await this.dataAdapter.create('referral-registrations', {
-      referrerUserId: referralCodeData.userId,
-      referrerWallet: referralCodeData.walletAddress,
-      referredUserId,
-      referredWallet: referredWallet.toLowerCase(),
+    // Get user info
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Create registration
+    const registration = await this.referralRegistrationRepository.save({
+      referrerUserId: referralCodeRecord.userId,
+      referrerWallet: referralCodeRecord.walletAddress,
+      referredUserId: userId,
+      referredWallet: user.walletAddress,
       referralCode,
-      registeredAt: new Date().toISOString(),
+      registeredAt: new Date(),
       isActive: true,
     });
 
     // Update referral code stats
-    await this.dataAdapter.update('referral-codes', referralCodeData.id, {
-      totalReferrals: referralCodeData.totalReferrals + 1,
+    await this.referralCodeRepository.update(referralCodeRecord.id, {
+      totalReferrals: referralCodeRecord.totalReferrals + 1,
     });
 
-    console.log(`Referral registered: ${referredUserId} referred by ${referralCodeData.userId}`);
-
-    return registration;
-  }
-
-  async processReferralCommission(orderId: string, referredUserId: string, orderAmount: string): Promise<ReferralCommission | null> {
-    // Check if user was referred
-    const referralRegistration = await this.dataAdapter.findOne('referral-registrations', 
-      (reg: ReferralRegistration) => reg.referredUserId === referredUserId && reg.isActive
-    );
-
-    if (!referralRegistration) {
-      return null;
-    }
-
-    // Calculate commission
-    const orderAmountDecimal = parseFloat(orderAmount);
-    const commissionAmount = (orderAmountDecimal * this.COMMISSION_PERCENTAGE / 100).toFixed(2);
-
-    // Create commission record
-    const commission = await this.dataAdapter.create('referral-commissions', {
-      referrerUserId: referralRegistration.referrerUserId,
-      referrerWallet: referralRegistration.referrerWallet,
-      referredUserId,
-      referredWallet: referralRegistration.referredWallet,
-      orderId,
-      orderAmount,
-      commissionAmount,
-      commissionPercentage: this.COMMISSION_PERCENTAGE,
-      status: 'pending',
-    });
-
-    // Record commission in ledger
-    try {
-      await this.ledgerService.createDoubleEntry(
-        referralRegistration.referrerUserId,
-        'platform_revenue',
-        'user_wallet',
-        commissionAmount,
-        'USDT',
-        `Referral commission from order ${orderId}`,
-        'referral' as any,
-        commission.id,
-      );
-
-      // Update commission status
-      await this.dataAdapter.update('referral-commissions', commission.id, {
-        status: 'paid',
-        paidAt: new Date().toISOString(),
-      });
-
-      // Update referral code total commissions
-      const referralCode = await this.dataAdapter.findOne('referral-codes', 
-        (code: ReferralCode) => code.userId === referralRegistration.referrerUserId && code.isActive
-      );
-
-      if (referralCode) {
-        const newTotal = (parseFloat(referralCode.totalCommissions) + parseFloat(commissionAmount)).toFixed(2);
-        await this.dataAdapter.update('referral-codes', referralCode.id, {
-          totalCommissions: newTotal,
-        });
-      }
-
-      console.log(`Referral commission processed: ${commissionAmount} USDT for user ${referralRegistration.referrerUserId}`);
-
-    } catch (error) {
-      console.error('Error processing referral commission:', error);
-      await this.dataAdapter.update('referral-commissions', commission.id, {
-        status: 'failed',
-      });
-    }
-
-    return commission;
-  }
-
-  async getUserReferralStats(userId: string): Promise<ReferralStatsDto> {
-    // Get user's referral code
-    const referralCode = await this.dataAdapter.findOne('referral-codes', 
-      (code: ReferralCode) => code.userId === userId && code.isActive
-    );
-
-    if (!referralCode) {
-      throw new NotFoundException('Referral code not found. Create one first.');
-    }
-
-    // Get referral registrations
-    const referrals = await this.dataAdapter.findWhere('referral-registrations',
-      (reg: ReferralRegistration) => reg.referrerUserId === userId && reg.isActive
-    );
-
-    // Get commissions
-    const commissions = await this.dataAdapter.findWhere('referral-commissions',
-      (comm: ReferralCommission) => comm.referrerUserId === userId
-    );
-
-    // Calculate stats
-    const totalCommissions = commissions.reduce((sum, comm) => sum + parseFloat(comm.commissionAmount), 0);
-    const pendingCommissions = commissions
-      .filter(comm => comm.status === 'pending')
-      .reduce((sum, comm) => sum + parseFloat(comm.commissionAmount), 0);
-    const paidCommissions = commissions
-      .filter(comm => comm.status === 'paid')
-      .reduce((sum, comm) => sum + parseFloat(comm.commissionAmount), 0);
-
-    // This month commissions
-    const thisMonth = new Date();
-    thisMonth.setDate(1);
-    thisMonth.setHours(0, 0, 0, 0);
-    
-    const thisMonthCommissions = commissions
-      .filter(comm => new Date(comm.createdAt) >= thisMonth && comm.status === 'paid')
-      .reduce((sum, comm) => sum + parseFloat(comm.commissionAmount), 0);
+    this.logger.log(`👥 Referral registered: ${user.walletAddress} referred by ${referralCodeRecord.walletAddress}`);
 
     return {
-      totalReferrals: referrals.length,
-      activeReferrals: referrals.filter(ref => ref.isActive).length,
-      totalCommissions: totalCommissions.toFixed(2),
-      pendingCommissions: pendingCommissions.toFixed(2),
-      paidCommissions: paidCommissions.toFixed(2),
-      thisMonthCommissions: thisMonthCommissions.toFixed(2),
-      referralLink: `${this.baseUrl}?ref=${referralCode.code}`,
-      recentReferrals: referrals.slice(0, 10),
-      recentCommissions: commissions.slice(0, 10),
+      success: true,
+      message: 'Referral registered successfully',
     };
   }
 
-  async getReferralByCode(code: string): Promise<ReferralCode | null> {
-    return this.dataAdapter.findOne('referral-codes', 
-      (referralCode: ReferralCode) => referralCode.code === code && referralCode.isActive
-    );
+  async processReferralCommission(orderId: string) {
+    try {
+      const order = await this.orderRepository.findOne({
+        where: { id: orderId }
+      });
+      
+      if (!order) return;
+
+      // Check if user was referred
+      const referralRegistration = await this.referralRegistrationRepository.findOne({
+        where: { referredUserId: order.userId, isActive: true }
+      });
+
+      if (!referralRegistration) {
+        this.logger.debug(`No referral found for user ${order.userId}`);
+        return;
+      }
+
+      // Calculate commission
+      const orderAmount = parseFloat(order.totalPriceUSDT);
+      const commissionAmount = (orderAmount * this.COMMISSION_PERCENTAGE) / 100;
+
+      // Create commission record
+      const commission = await this.referralCommissionRepository.save({
+        referrerUserId: referralRegistration.referrerUserId,
+        referrerWallet: referralRegistration.referrerWallet,
+        referredUserId: order.userId,
+        referredWallet: referralRegistration.referredWallet,
+        orderId: orderId,
+        orderAmount: orderAmount.toString(),
+        commissionAmount: commissionAmount.toString(),
+        commissionPercentage: this.COMMISSION_PERCENTAGE,
+        status: 'pending',
+      });
+
+      // Process commission payment immediately
+      await this.payCommission(commission.id);
+
+      this.logger.log(`💰 Referral commission processed: $${commissionAmount.toFixed(2)} for ${referralRegistration.referrerWallet}`);
+
+    } catch (error) {
+      this.logger.error(`❌ Error processing referral commission for order ${orderId}:`, error);
+    }
   }
 
-  private generateReferralCode(walletAddress: string, addSuffix = false): string {
-    const base = walletAddress.slice(2, 8).toUpperCase(); // Take 6 chars after 0x
-    const suffix = addSuffix ? Math.random().toString(36).substr(2, 3).toUpperCase() : '';
-    return `${base}${suffix}`;
+  private async payCommission(commissionId: string) {
+    try {
+      const commission = await this.referralCommissionRepository.findOne({
+        where: { id: commissionId }
+      });
+      
+      if (!commission) return;
+
+      // Record commission payment in ledger
+      await this.ledgerService.recordTransaction(
+        commission.referrerUserId,
+        'referral_commission',
+        commissionId,
+        parseFloat(commission.commissionAmount),
+        'USDT',
+        'credit',
+        `Referral commission from ${commission.referredWallet}`,
+        'user_wallet'
+      );
+
+      // Update commission status
+      await this.referralCommissionRepository.update(commissionId, {
+        status: 'paid',
+        paidAt: new Date(),
+      });
+
+      // Update referral code total commissions
+      const referralCode = await this.referralCodeRepository.findOne({
+        where: { userId: commission.referrerUserId }
+      });
+
+      if (referralCode) {
+        const newTotal = parseFloat(referralCode.totalCommissions) + parseFloat(commission.commissionAmount);
+        await this.referralCodeRepository.update(referralCode.id, {
+          totalCommissions: newTotal.toString(),
+        });
+      }
+
+      this.logger.log(`✅ Commission paid: $${commission.commissionAmount} to ${commission.referrerWallet}`);
+
+    } catch (error) {
+      this.logger.error(`❌ Error paying commission ${commissionId}:`, error);
+      
+      // Mark commission as failed
+      await this.referralCommissionRepository.update(commissionId, {
+        status: 'failed',
+      });
+    }
   }
 
-  async getUserReferralCode(userId: string): Promise<ReferralCode | null> {
-    return this.dataAdapter.findOne('referral-codes', 
-      (code: ReferralCode) => code.userId === userId && code.isActive
-    );
+  async getReferralStats(userId: string) {
+    try {
+      const referralCode = await this.getMyReferralCode(userId);
+      if (!referralCode) {
+        return {
+          totalReferrals: 0,
+          activeReferrals: 0,
+          totalCommissions: '0.00',
+          pendingCommissions: '0.00',
+          paidCommissions: '0.00',
+          thisMonthCommissions: '0.00',
+          referralLink: '',
+          recentReferrals: [],
+          recentCommissions: [],
+        };
+      }
+
+      const [registrations, commissions] = await Promise.all([
+        this.referralRegistrationRepository.find({
+          where: { referrerUserId: userId },
+          order: { createdAt: 'DESC' },
+          take: 10
+        }),
+        this.referralCommissionRepository.find({
+          where: { referrerUserId: userId },
+          order: { createdAt: 'DESC' },
+          take: 10
+        }),
+      ]);
+
+      const totalCommissions = commissions.reduce((sum, c) => sum + parseFloat(c.commissionAmount), 0);
+      const paidCommissions = commissions
+        .filter(c => c.status === 'paid')
+        .reduce((sum, c) => sum + parseFloat(c.commissionAmount), 0);
+      const pendingCommissions = commissions
+        .filter(c => c.status === 'pending')
+        .reduce((sum, c) => sum + parseFloat(c.commissionAmount), 0);
+
+      const thisMonth = new Date();
+      thisMonth.setDate(1);
+      const thisMonthCommissions = commissions
+        .filter(c => new Date(c.createdAt) >= thisMonth)
+        .reduce((sum, c) => sum + parseFloat(c.commissionAmount), 0);
+
+      return {
+        totalReferrals: registrations.length,
+        activeReferrals: registrations.filter(r => r.isActive).length,
+        totalCommissions: totalCommissions.toFixed(2),
+        pendingCommissions: pendingCommissions.toFixed(2),
+        paidCommissions: paidCommissions.toFixed(2),
+        thisMonthCommissions: thisMonthCommissions.toFixed(2),
+        referralLink: `${process.env.FRONTEND_URL || 'https://goalplay.pro'}?ref=${referralCode.code}`,
+        recentReferrals: registrations,
+        recentCommissions: commissions,
+      };
+    } catch (error) {
+      this.logger.error('Error getting referral stats:', error);
+      return {
+        totalReferrals: 0,
+        activeReferrals: 0,
+        totalCommissions: '0.00',
+        pendingCommissions: '0.00',
+        paidCommissions: '0.00',
+        thisMonthCommissions: '0.00',
+        referralLink: '',
+        recentReferrals: [],
+        recentCommissions: [],
+      };
+    }
   }
 
-  async getAllReferralCommissions(userId: string): Promise<ReferralCommission[]> {
-    return this.dataAdapter.findWhere('referral-commissions',
-      (comm: ReferralCommission) => comm.referrerUserId === userId
-    );
+  async validateReferralCode(code: string) {
+    const referralCode = await this.referralCodeRepository.findOne({
+      where: { code, isActive: true }
+    });
+
+    return {
+      valid: !!referralCode,
+      referrerWallet: referralCode?.walletAddress || null,
+    };
   }
 
-  async getAllUserReferrals(userId: string): Promise<ReferralRegistration[]> {
-    return this.dataAdapter.findWhere('referral-registrations',
-      (reg: ReferralRegistration) => reg.referrerUserId === userId && reg.isActive
-    );
+  private generateReferralCode(walletAddress: string): string {
+    const prefix = walletAddress.slice(2, 8).toUpperCase();
+    const suffix = Math.random().toString(36).substring(2, 5).toUpperCase();
+    return `${prefix}${suffix}`;
   }
 }

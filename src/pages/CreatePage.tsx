@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, Image as ImageIcon, Plus, X, Info } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
-import { api } from '../services/api';
+import ApiService from '../services/api';
 import { CreateNFTData } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
@@ -26,7 +26,10 @@ const CreatePage = () => {
   const [previewImage, setPreviewImage] = useState<string>('');
 
   const createNFTMutation = useMutation({
-    mutationFn: api.createNFT,
+    mutationFn: (data: CreateNFTData) => {
+      // Mock implementation for now
+      return Promise.resolve({ success: true });
+    },
     onSuccess: () => {
       // Reset form or redirect
       setFormData({

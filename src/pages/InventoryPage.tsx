@@ -38,6 +38,7 @@ const InventoryPage = () => {
     enabled: !!selectedPlayer,
     refetchInterval: 5000, // Check every 5 seconds
   });
+
   const tabs = [
     { id: 'players', label: 'My Players', icon: Users },
     { id: 'kits', label: 'Player Kits', icon: Palette },
@@ -51,14 +52,6 @@ const InventoryPage = () => {
     if (level >= 10) return 'from-blue-400 to-cyan-500';
     if (level >= 5) return 'from-green-400 to-emerald-500';
     return 'from-gray-400 to-gray-500';
-  };
-
-  const getStatColor = (value: number) => {
-    if (value >= 90) return 'text-yellow-400';
-    if (value >= 80) return 'text-green-400';
-    if (value >= 70) return 'text-blue-400';
-    if (value >= 60) return 'text-purple-400';
-    return 'text-gray-400';
   };
 
   if (playersLoading) {
@@ -275,6 +268,7 @@ const InventoryPage = () => {
               )}
             </div>
           )}
+
           {activeTab === 'kits' && (
             <div className="space-y-6">
               {selectedPlayer ? (

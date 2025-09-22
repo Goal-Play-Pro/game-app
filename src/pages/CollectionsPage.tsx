@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, Volume2, Users, Clock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../services/api';
+import ApiService from '../services/api';
 import CollectionCard from '../components/collections/CollectionCard';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
@@ -13,7 +13,10 @@ const CollectionsPage = () => {
   // Fetch collections
   const { data: collections, isLoading, error } = useQuery({
     queryKey: ['collections', timeframe, sortBy],
-    queryFn: () => api.getCollections()
+    queryFn: () => {
+      // Mock implementation for now
+      return Promise.resolve([]);
+    }
   });
 
   const timeframes = [

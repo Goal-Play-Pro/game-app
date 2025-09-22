@@ -1,14 +1,7 @@
-import { Controller, Get, Post, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, UseGuards, Request, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { PenaltyService } from './penalty.service';
-import { 
-  CreateSessionDto, 
-  JoinSessionDto, 
-  PenaltyAttemptDto, 
-  PenaltySessionDto,
-  AttemptResultDto 
-} from './dto/penalty.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('penalty')
 @Controller('penalty')
@@ -19,61 +12,36 @@ export class PenaltyController {
 
   @Get('sessions')
   @ApiOperation({ summary: 'Get user penalty sessions' })
-  @ApiResponse({ status: 200, description: 'Sessions retrieved', type: [PenaltySessionDto] })
-  async getUserSessions(@Request() req: any): Promise<PenaltySessionDto[]> {
-    return this.penaltyService.findUserSessions(req.user.userId);
+  @ApiResponse({ status: HttpStatus.OK, description: 'Sessions retrieved successfully' })
+  async getUserSessions(@Request() req: any) {
+    return this.penaltyService.getUserSessions(req.user.sub);
   }
 
   @Post('sessions')
   @ApiOperation({ summary: 'Create penalty session' })
-  @ApiResponse({ status: 201, description: 'Session created', type: PenaltySessionDto })
-  async createSession(@Request() req: any, @Body() dto: CreateSessionDto): Promise<PenaltySessionDto> {
-    return this.penaltyService.createSession(req.user.userId, dto);
+  @ApiResponse({ status: HttpStatus.CREATED, description: 'Session created successfully' })
+  async createSession(@Body() sessionData: any, @Request() req: any) {
+    return this.penaltyService.createSession(req.user.sub, sessionData);
   }
 
   @Get('sessions/:id')
-  @ApiOperation({ summary: 'Get penalty session details' })
-  @ApiResponse({ status: 200, description: 'Session retrieved', type: PenaltySessionDto })
-  async getSession(@Param('id') id: string): Promise<PenaltySessionDto> {
-    return this.penaltyService.findSessionById(id);
-  }
-
-  @Post('sessions/:id/join')
-  @ApiOperation({ summary: 'Join PvP penalty session' })
-  @ApiResponse({ status: 200, description: 'Session joined', type: PenaltySessionDto })
-  async joinSession(
-    @Request() req: any,
-    @Param('id') id: string,
-    @Body() dto: JoinSessionDto,
-  ): Promise<PenaltySessionDto> {
-    return this.penaltyService.joinSession(id, req.user.userId, dto);
+  @ApiOperation({ summary: 'Get session details' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Session details retrieved successfully' })
+  async getSessionDetails(@Param('id') id: string, @Request() req: any) {
+    return this.penaltyService.getSessionDetails(id, req.user.sub);
   }
 
   @Post('sessions/:id/attempts')
-  @ApiOperation({ summary: 'Attempt penalty kick' })
-  @ApiResponse({ status: 200, description: 'Attempt executed', type: AttemptResultDto })
-  async attemptPenalty(
-    @Request() req: any,
-    @Param('id') id: string,
-    @Body() dto: PenaltyAttemptDto,
-  ): Promise<AttemptResultDto> {
-    const result = await this.penaltyService.attemptPenalty(id, req.user.userId, dto);
-    
-    return {
-      isGoal: result.isGoal,
-      description: result.description,
-      round: result.session.currentRound - 1,
-      hostScore: result.session.hostScore,
-      guestScore: result.session.guestScore,
-      sessionStatus: result.session.status,
-      winnerId: result.session.winnerId,
-    };
+  @ApiOperation({ summary: 'Attempt penalty shot' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Penalty attempt processed successfully' })
+  async attemptPenalty(@Param('id') sessionId: string, @Body() attemptData: any, @Request() req: any) {
+    return this.penaltyService.attemptPenalty(sessionId, attemptData, req.user.sub);
   }
 
-  @Get('sessions/:id/attempts')
-  @ApiOperation({ summary: 'Get session attempts history' })
-  @ApiResponse({ status: 200, description: 'Attempts retrieved' })
-  async getSessionAttempts(@Param('id') id: string) {
-    return this.penaltyService.getSessionAttempts(id);
+  @Post('sessions/:id/join')
+  @ApiOperation({ summary: 'Join multiplayer session' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Joined session successfully' })
+  async joinSession(@Param('id') sessionId: string, @Body() joinData: any, @Request() req: any) {
+    return this.penaltyService.joinSession(sessionId, joinData.playerId, req.user.sub);
   }
 }

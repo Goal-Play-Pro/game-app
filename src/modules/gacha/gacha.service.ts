@@ -1,141 +1,169 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { DataAdapterService } from '../../common/services/data-adapter.service';
-import { Division as DivisionConfig, DivisionHelpers } from '../../config/division.config';
-import { PenaltyProbabilityService } from '../../services/penalty-probability.service';
-import { REAL_PLAYERS_DATA, RealPlayersService } from '../../data/players.data';
-import { 
-  GachaPool, 
-  GachaPlayer, 
-  GachaPoolEntry, 
-  GachaDraw,
-  PlayerStats 
-} from './entities/gacha.entity';
-import { DrawResultDto } from './dto/gacha.dto';
-import { Division as CommonDivision, Position, Rarity } from '../../common/types/base.types';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Order } from '../../database/entities/order.entity';
+import { GachaPool } from '../../database/entities/gacha-pool.entity';
+import { GachaPlayer } from '../../database/entities/gacha-player.entity';
+import { GachaPoolEntry } from '../../database/entities/gacha-pool-entry.entity';
+import { GachaDraw } from '../../database/entities/gacha-draw.entity';
+import { OwnedPlayer } from '../../database/entities/owned-player.entity';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class GachaService {
+  private readonly logger = new Logger(GachaService.name);
+
   constructor(
-    private dataAdapter: DataAdapterService,
-    private penaltyProbabilityService: PenaltyProbabilityService,
+    @InjectRepository(GachaPool)
+    private gachaPoolRepository: Repository<GachaPool>,
+    @InjectRepository(GachaPlayer)
+    private gachaPlayerRepository: Repository<GachaPlayer>,
+    @InjectRepository(GachaPoolEntry)
+    private gachaPoolEntryRepository: Repository<GachaPoolEntry>,
+    @InjectRepository(GachaDraw)
+    private gachaDrawRepository: Repository<GachaDraw>,
+    @InjectRepository(OwnedPlayer)
+    private ownedPlayerRepository: Repository<OwnedPlayer>,
   ) {}
 
-  async executeDraw(userId: string, orderId: string, poolId: string, quantity: number): Promise<DrawResultDto> {
-    const pool = await this.dataAdapter.findById('gacha-pools', poolId);
-    if (!pool || !pool.isActive) {
-      throw new NotFoundException('Gacha pool not found');
+  async executeGachaDraw(order: Order) {
+    this.logger.log(`🎲 Executing gacha draw for order ${order.id}`);
+
+    // Get gacha pool from product variant
+    const gachaPoolId = order.productVariant?.gachaPoolId;
+    if (!gachaPoolId) {
+      throw new Error('No gacha pool ID found for product variant');
     }
 
-    // Get user's owned players to avoid duplicates
-    const ownedPlayers = await this.dataAdapter.findWhere('owned-players',
-      (p: any) => p.userId === userId && p.isActive
-    );
-    const ownedPlayerNames = ownedPlayers.map(p => p.playerName || '');
-
-    // Generate real players for draw using real data
-    const drawnPlayers = this.generateRealPlayersForDraw(quantity, pool.division, ownedPlayerNames);
-    
-    // Record draw
-    const draw = await this.dataAdapter.create('gacha-draws', {
-      userId,
-      orderId,
-      poolId,
-      playersDrawn: drawnPlayers.map(p => p.id),
-      seed: `mock-seed-${Date.now()}`,
-      drawDate: new Date().toISOString(),
+    // Get gacha pool
+    const pool = await this.gachaPoolRepository.findOne({
+      where: { id: gachaPoolId, isActive: true }
     });
 
-    console.log(`Gacha draw executed: ${draw.id} for user ${userId}`);
+    if (!pool) {
+      throw new NotFoundException(`Gacha pool ${gachaPoolId} not found`);
+    }
+
+    // Get pool entries with players
+    const poolEntries = await this.gachaPoolEntryRepository.find({
+      where: { poolId: pool.id, isActive: true },
+      relations: ['player'],
+    });
+
+    if (poolEntries.length === 0) {
+      throw new Error('No players available in gacha pool');
+    }
+
+    // Get user's owned players for anti-duplicate policy
+    const ownedPlayers = await this.ownedPlayerRepository.find({
+      where: { userId: order.userId, isActive: true }
+    });
+
+    const ownedPlayerIds = ownedPlayers.map(op => op.playerId);
+
+    // Filter available players based on anti-duplicate policy
+    let availableEntries = poolEntries;
+    if (pool.antiDuplicatePolicy === 'EXCLUDE_OWNED_AT_DRAW') {
+      availableEntries = poolEntries.filter(entry => !ownedPlayerIds.includes(entry.playerId));
+    }
+
+    if (availableEntries.length === 0) {
+      this.logger.warn(`⚠️ No available players for user ${order.userId} in pool ${pool.id}`);
+      availableEntries = poolEntries; // Fallback to allow duplicates
+    }
+
+    // Execute weighted random selection
+    const drawnPlayers = [];
+    const drawCount = order.quantity;
+    const seed = uuidv4();
+
+    for (let i = 0; i < drawCount; i++) {
+      const selectedEntry = this.weightedRandomSelection(availableEntries, seed + i);
+      drawnPlayers.push(selectedEntry.player);
+    }
+
+    // Create gacha draw record
+    const gachaDraw = await this.gachaDrawRepository.save({
+      userId: order.userId,
+      orderId: order.id,
+      poolId: pool.id,
+      playersDrawn: drawnPlayers.map(p => p.id),
+      seed,
+      drawDate: new Date(),
+    });
+
+    this.logger.log(`🎉 Gacha draw completed: ${drawnPlayers.length} players drawn`);
 
     return {
+      drawId: gachaDraw.id,
       players: drawnPlayers,
-      drawId: draw.id,
       poolName: pool.name,
-      drawDate: draw.drawDate,
     };
   }
 
-  private generateRealPlayersForDraw(quantity: number, division: CommonDivision, excludeOwned: string[] = []): GachaPlayer[] {
-    const players: GachaPlayer[] = [];
-    const divisionString = division;
+  async addPlayerToInventory(userId: string, player: GachaPlayer, orderId: string, drawId: string) {
+    const ownedPlayer = await this.ownedPlayerRepository.save({
+      userId,
+      playerId: player.id,
+      sourceOrderId: orderId,
+      sourceDrawId: drawId,
+      acquiredAt: new Date(),
+      currentLevel: 1,
+      experience: 0,
+      isActive: true,
+    });
 
-    for (let i = 0; i < quantity; i++) {
-      // Seleccionar jugador real aleatorio para esta división
-      const playerData = RealPlayersService.generateRandomPlayerForDraw(divisionString, excludeOwned);
-      
-      if (!playerData) {
-        console.warn(`No available players for division ${divisionString}`);
-        continue;
-      }
-
-      // Obtener stats base para la división
-      const baseStats = RealPlayersService.getPlayerBaseStats(playerData.name, divisionString);
-      if (!baseStats) {
-        console.warn(`No stats found for ${playerData.name} in division ${divisionString}`);
-        continue;
-      }
-
-      // Convertir stats a formato esperado (añadir overall)
-      const stats = {
-        ...baseStats,
-        defending: baseStats.defense, // Mapear defense -> defending para compatibilidad
-        overall: Math.floor((baseStats.speed + baseStats.shooting + baseStats.passing + baseStats.defense + baseStats.goalkeeping) / 5)
-      };
-      
-      // VALIDACIÓN CRÍTICA: Verificar que stats sumen exactamente startingStats
-      const playerStatsForValidation = {
-        speed: stats.speed,
-        shooting: stats.shooting,
-        passing: stats.passing,
-        defending: stats.defending,
-        goalkeeping: stats.goalkeeping,
-        overall: stats.overall
-      };
-      
-      const isValidSum = this.penaltyProbabilityService.validateCharacterStatsSum(
-        playerStatsForValidation, 
-        division
-      );
-      
-      if (!isValidSum) {
-        console.error(`VALIDATION ERROR: Player ${playerData.name} stats don't sum to startingStats for division ${division}`);
-        const details = this.penaltyProbabilityService.getCalculationDetails(playerStatsForValidation, division);
-        console.error('Validation details:', details);
-        // Continuar pero logear el error para debugging
-      }
-
-      players.push({
-        id: `${playerData.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}-${i}`,
-        name: playerData.name,
-        position: playerData.position as Position,
-        rarity: playerData.rarity as Rarity,
-        division,
-        baseStats: stats,
-        imageUrl: playerData.imageUrl,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      
-      // Añadir a la lista de excluidos para evitar duplicados en este draw
-      excludeOwned.push(playerData.name);
-    }
-
-    return players;
+    this.logger.log(`👤 Player ${player.name} added to user ${userId} inventory`);
+    return ownedPlayer;
   }
 
-  async findPoolById(id: string): Promise<GachaPool> {
-    const pool = await this.dataAdapter.findById('gacha-pools', id);
-    if (!pool) {
-      throw new NotFoundException('Gacha pool not found');
-    }
-    return pool;
+  async getGachaPool(id: string) {
+    return this.gachaPoolRepository.findOne({
+      where: { id, isActive: true }
+    });
   }
 
-  async findPlayerById(id: string): Promise<GachaPlayer> {
-    const player = await this.dataAdapter.findById('gacha-players', id);
-    if (!player) {
-      throw new NotFoundException('Player not found');
+  async getGachaPlayer(id: string) {
+    return this.gachaPlayerRepository.findOne({
+      where: { id }
+    });
+  }
+
+  async getRealPlayersData() {
+    return this.gachaPlayerRepository.find({
+      order: { name: 'ASC' }
+    });
+  }
+
+  private weightedRandomSelection(entries: GachaPoolEntry[], seed: string): GachaPoolEntry {
+    // Create deterministic random based on seed
+    const random = this.seededRandom(seed);
+    
+    // Calculate total weight
+    const totalWeight = entries.reduce((sum, entry) => sum + parseFloat(entry.weight.toString()), 0);
+    
+    // Generate random value
+    let randomValue = random * totalWeight;
+    
+    // Select entry based on weight
+    for (const entry of entries) {
+      randomValue -= parseFloat(entry.weight.toString());
+      if (randomValue <= 0) {
+        return entry;
+      }
     }
-    return player;
+    
+    // Fallback to first entry
+    return entries[0];
+  }
+
+  private seededRandom(seed: string): number {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      const char = seed.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash) / 2147483647;
   }
 }

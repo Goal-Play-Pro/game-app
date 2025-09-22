@@ -3,16 +3,19 @@ import { motion } from 'framer-motion';
 import { ShoppingCart, Star, Info, Zap, Trophy } from 'lucide-react';
 import { ProductVariant } from '../../types';
 import LoadingSpinner from '../common/LoadingSpinner';
+import PaymentModal from '../payment/PaymentModal';
 
 interface ProductCardProps {
   variant: ProductVariant;
-  onPurchase: (variantId: string) => void;
+  onPurchase?: (variantId: string) => void;
   isPurchasing?: boolean;
   className?: string;
+  order?: any; // Order data if purchase was initiated
 }
 
-const ProductCard = ({ variant, onPurchase, isPurchasing = false, className = '' }: ProductCardProps) => {
+const ProductCard = ({ variant, onPurchase, isPurchasing = false, className = '', order }: ProductCardProps) => {
   const [showDetails, setShowDetails] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const getDivisionColor = (division: string) => {
     switch (division.toLowerCase()) {
@@ -137,7 +140,13 @@ const ProductCard = ({ variant, onPurchase, isPurchasing = false, className = ''
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => onPurchase(variant.id)}
+          onClick={() => {
+            if (order) {
+              setShowPaymentModal(true);
+            } else if (onPurchase) {
+              onPurchase(variant.id);
+            }
+          }}
           disabled={isPurchasing}
           className="w-full btn-primary flex items-center justify-center space-x-2 disabled:opacity-50"
         >
@@ -146,7 +155,7 @@ const ProductCard = ({ variant, onPurchase, isPurchasing = false, className = ''
           ) : (
             <>
               <ShoppingCart className="w-4 h-4" />
-              <span>Buy Pack</span>
+              <span>{order ? 'Complete Payment' : 'Buy Pack'}</span>
             </>
           )}
         </motion.button>
@@ -191,6 +200,15 @@ const ProductCard = ({ variant, onPurchase, isPurchasing = false, className = ''
             </button>
           </div>
         </motion.div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && order && (
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          order={order}
+        />
       )}
     </motion.div>
   );

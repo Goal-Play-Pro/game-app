@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ShoppingBag, Star, Zap, Trophy, Package, CreditCard, TrendingUp } from 'lucide-react';
+import { ShoppingBag, Star, Zap, Trophy, Package, CreditCard, TrendingUp, Users } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ApiService from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import MarketDashboard from '../components/market/MarketDashboard';
 import ProductCard from '../components/market/ProductCard';
 import PlayersGallery from '../components/player/PlayersGallery';
+import PaymentModal from '../components/payment/PaymentModal';
 import { ChainType } from '../types';
 import { useReferral } from '../hooks/useReferral';
 
@@ -19,6 +20,9 @@ const ShopPage = () => {
   const [selectedVariant, setSelectedVariant] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
   const [activeTab, setActiveTab] = useState<'products' | 'market' | 'orders' | 'players'>('products');
+  const [selectedPlayer, setSelectedPlayer] = useState<string>('');
+  const [pendingOrder, setPendingOrder] = useState<any>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const { registerPendingReferral } = useReferral();
 
   const queryClient = useQueryClient();
@@ -27,6 +31,8 @@ const ShopPage = () => {
   const { data: products, isLoading: productsLoading } = useQuery({
     queryKey: ['products'],
     queryFn: ApiService.getProducts,
+    retry: 2,
+    retryDelay: 1000,
   });
 
   // Fetch product variants for selected product
@@ -34,6 +40,8 @@ const ShopPage = () => {
     queryKey: ['product-variants', selectedProduct],
     queryFn: () => ApiService.getProductVariants(selectedProduct),
     enabled: !!selectedProduct,
+    retry: 1,
+    retryDelay: 1000,
   });
 
   // Fetch user orders
@@ -86,14 +94,20 @@ const ShopPage = () => {
       return;
     }
 
-    // Mock wallet address - in real app this would come from connected wallet
-    const mockWallet = '0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000';
+    // Obtener wallet address del localStorage o usar mock
+    const connectedWallet = localStorage.getItem('walletAddress');
+    const paymentWallet = connectedWallet || '0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000';
+    
+    if (!connectedWallet) {
+      alert('Please connect your wallet first!');
+      return;
+    }
 
     createOrderMutation.mutate({
       variantId: targetVariant,
       qty: quantity,
       chainType: ChainType.ETHEREUM,
-      wallet: mockWallet,
+      wallet: paymentWallet,
     });
   };
 
@@ -508,6 +522,7 @@ const ShopPage = () => {
           </div>
         </div>
           )}
+        </motion.div>
 
         {/* Pack Opening Animation Info */}
         <motion.div
@@ -548,8 +563,19 @@ const ShopPage = () => {
             </div>
           </div>
         </motion.div>
-        </motion.div>
       </div>
+
+      {/* Payment Modal */}
+      {showPaymentModal && pendingOrder && (
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setPendingOrder(null);
+          }}
+          order={pendingOrder}
+        />
+      )}
     </div>
   );
 };

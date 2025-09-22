@@ -13,7 +13,6 @@ import {
   Target,
   Trophy
 } from 'lucide-react';
-import { AIService } from '../../services/ai.service';
 import LoadingSpinner from '../common/LoadingSpinner';
 
 interface Message {
@@ -38,13 +37,177 @@ const AIAgent = ({ className = '' }: AIAgentProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // AI Service functions (local implementation)
+  const getWelcomeMessage = (): string => {
+    return `¡Hola, futbolero! ⚽ Soy tu asistente personal de Goal Play.
+
+🎮 Estamos viviendo una revolución: miles de jugadores ya están ganando dinero jugando penalties.
+
+¿Listo para unirte a la leyenda? Pregúntame lo que quieras sobre:
+🎯 Cómo jugar y ganar
+💰 Token GOAL y staking  
+🏆 Divisiones y estrategias
+👥 Sistema de referidos
+
+¡Empecemos! 🚀`;
+  };
+
+  const getAIResponse = async (userMessage: string, conversationHistory: Message[]): Promise<string> => {
+    // Simple AI responses based on keywords
+    const message = userMessage.toLowerCase();
+    
+    console.log(`🤖 AI processing message: "${userMessage}"`);
+    
+    if (message.includes('penalty') || message.includes('penalti')) {
+      return `¡Excelente pregunta sobre penalties! ⚽
+
+El sistema de penalty en Goal Play es revolucionario:
+
+🎯 **Mecánica Única**: Cada jugador tiene stats reales que determinan su probabilidad de anotar.
+
+📊 **Por División**:
+- Primera: 50%-90% probabilidad (Messi, Ronaldo)
+- Segunda: 40%-80% probabilidad (Cole Palmer, Wirtz)
+- Tercera: 30%-70% probabilidad (Talentos emergentes)
+
+🎮 **Gameplay**: Eliges dirección + potencia. El sistema calcula si es gol.
+
+💰 **Recompensas**: Cada gol = XP + tokens GOAL.
+
+¿Te gustaría saber qué división te conviene más? 🚀`;
+    }
+    
+    if (message.includes('token') || message.includes('goal')) {
+      return `¡El token GOAL es el corazón de todo! 💎
+
+🪙 **Datos Básicos**:
+- Símbolo: GOAL
+- Cantidad: 1,000,000,000 tokens
+- Red: Binance Smart Chain (BSC)
+
+💰 **Para Qué Sirve**:
+- Comprar packs de jugadores NFT
+- Recibir recompensas por victorias
+- Hacer staking para ingresos pasivos
+- Votar en decisiones del proyecto
+
+🚀 **Oportunidad Única**:
+¡Las primeras 4 semanas de staking dan DOBLE recompensas!
+
+¿Quieres que te ayude a añadirlo a MetaMask? 🦊`;
+    }
+    
+    if (message.includes('division') || message.includes('división')) {
+      return `¡Las divisiones son clave en Goal Play! 🏆
+
+📊 **Sistema de 3 Divisiones**:
+
+👑 **Primera División**:
+- Jugadores élite (Messi, Ronaldo, Mbappé)
+- Probabilidad: 50%-90% de anotar
+- Precio: $1,000-$5,000 USDT
+- Recompensas: Hasta $50 por victoria
+
+🥈 **Segunda División**:
+- Jugadores competitivos (Cole Palmer, Wirtz)
+- Probabilidad: 40%-80% de anotar
+- Precio: $200-$850 USDT
+- Recompensas: Hasta $20 por victoria
+
+🥉 **Tercera División**:
+- Talentos emergentes
+- Probabilidad: 30%-70% de anotar
+- Precio: $30-$130 USDT
+- Recompensas: Hasta $10 por victoria
+
+💡 **Consejo**: ¡Empieza en Tercera para aprender y sube gradualmente!`;
+    }
+    
+    if (message.includes('referido') || message.includes('referral')) {
+      return `¡El sistema de referidos es increíble! 👥💰
+
+🎯 **Cómo Funciona**:
+1. Creas tu código único
+2. Compartes tu link especial
+3. Tus amigos se registran con tu código
+4. ¡Ganas 5% de TODAS sus compras PARA SIEMPRE!
+
+💰 **Ejemplo Real**:
+- Tu amigo compra pack de $1,000 USDT
+- Tú recibes $50 USDT automáticamente
+- ¡Sin límites ni expiración!
+
+🚀 **Estrategia Pro**:
+- Comparte en redes sociales
+- Crea contenido sobre Goal Play
+- Invita a comunidades gaming
+- ¡Algunos usuarios ganan $500+ al mes!
+
+¿Quieres que te ayude a crear tu código? 🔗`;
+    }
+    
+    if (message.includes('empezar') || message.includes('comenzar') || message.includes('start')) {
+      return `¡Perfecto! Te guío paso a paso 🚀
+
+🎯 **Guía Rápida para Empezar**:
+
+1️⃣ **Conecta tu Wallet**:
+   - Instala MetaMask
+   - Conecta en la esquina superior derecha
+   - Cambia a BSC network
+
+2️⃣ **Añade Token GOAL**:
+   - Ve a Tokenomics
+   - Clic en "Añadir a MetaMask"
+   - ¡Listo para recibir recompensas!
+
+3️⃣ **Compra tu Primer Pack**:
+   - Ve a Shop
+   - Empieza con Tercera División ($30)
+   - Paga con USDT
+
+4️⃣ **Entrena tu Jugador**:
+   - Ve a Inventory
+   - Entrena hasta 100%
+   - ¡Ya puedes jugar!
+
+5️⃣ **Juega y Gana**:
+   - Ve a Game
+   - Juega penalties
+   - ¡Gana tokens GOAL!
+
+¿En qué paso necesitas ayuda? 🎮`;
+    }
+    
+    return `¡Hola! 👋 Soy tu asistente experto en Goal Play.
+
+Puedo ayudarte con TODO sobre nuestro ecosistema:
+🎯 Gameplay y mecánicas
+💰 Economía y tokenomics  
+🏆 Estrategias de inversión
+🎮 Guías paso a paso
+
+¿Qué te gustaría saber? ⚽🚀`;
+  };
+
+  const getErrorMessage = (): string => {
+    return `¡Ups! 😅 Tuve un pequeño problema técnico, pero estoy aquí para ayudarte.
+
+🎯 **Acciones Rápidas**:
+- Conecta tu wallet y añade token GOAL
+- Explora los packs desde $30 USDT
+- Crea tu código de referido (5% comisión)
+
+¿Repites tu pregunta? ¡Estoy listo! 🚀⚽`;
+  };
+
   // Initialize with welcome message
   useEffect(() => {
     if (isOpen && messages.length === 0) {
       const welcomeMessage: Message = {
         id: 'welcome',
         type: 'ai',
-        content: AIService.getWelcomeMessage(),
+        content: getWelcomeMessage(),
         timestamp: new Date()
       };
       setMessages([welcomeMessage]);
@@ -90,7 +253,7 @@ const AIAgent = ({ className = '' }: AIAgentProps) => {
       setMessages(prev => [...prev, typingMessage]);
 
       // Get AI response
-      const aiResponse = await AIService.getResponse(userMessage.content, messages);
+      const aiResponse = await getAIResponse(userMessage.content, messages);
 
       // Remove typing indicator and add real response
       setMessages(prev => {
@@ -112,7 +275,7 @@ const AIAgent = ({ className = '' }: AIAgentProps) => {
         return [...withoutTyping, {
           id: Date.now().toString(),
           type: 'ai',
-          content: AIService.getErrorMessage(),
+          content: getErrorMessage(),
           timestamp: new Date()
         }];
       });
@@ -133,7 +296,7 @@ const AIAgent = ({ className = '' }: AIAgentProps) => {
     setMessages([{
       id: 'welcome-new',
       type: 'ai',
-      content: AIService.getWelcomeMessage(),
+      content: getWelcomeMessage(),
       timestamp: new Date()
     }]);
   };

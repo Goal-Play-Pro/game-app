@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   TrendingUp, 
@@ -12,7 +11,6 @@ import {
   Star
 } from 'lucide-react';
 import { PlayerStats } from '../../types';
-import { DivisionHelpers } from '../../config/division.config';
 import ApiService from '../../services/api';
 
 interface PlayerStatsDisplayProps {
@@ -44,6 +42,21 @@ const PlayerStatsDisplay = ({
         setPenaltyChance(chance);
       } catch (error) {
         console.warn('Could not calculate penalty chance');
+        // Fallback calculation
+        const totalStats = playerStats.speed + playerStats.shooting + playerStats.passing + 
+                          playerStats.defending + playerStats.goalkeeping;
+        
+        const divisionRanges = {
+          primera: { min: 95, max: 171, minChance: 50, maxChance: 90 },
+          segunda: { min: 76, max: 152, minChance: 40, maxChance: 80 },
+          tercera: { min: 57, max: 133, minChance: 30, maxChance: 70 }
+        };
+        
+        const range = divisionRanges[division.toLowerCase() as keyof typeof divisionRanges] || divisionRanges.tercera;
+        const ratio = Math.max(0, Math.min(1, (totalStats - range.min) / (range.max - range.min)));
+        const chance = range.minChance + (range.maxChance - range.minChance) * ratio;
+        
+        setPenaltyChance(Math.floor(Math.max(5, Math.min(95, chance))));
       }
     };
     calculateChance();
@@ -77,7 +90,14 @@ const PlayerStatsDisplay = ({
     }
   };
 
-  const divisionConfig = DivisionHelpers.getDivisionConfig(division);
+  // Division configuration
+  const divisionConfig = {
+    primera: { startingStats: 95, maxStats: 171, startingPercentage: 50, maxPercentage: 90 },
+    segunda: { startingStats: 76, maxStats: 152, startingPercentage: 40, maxPercentage: 80 },
+    tercera: { startingStats: 57, maxStats: 133, startingPercentage: 30, maxPercentage: 70 }
+  };
+
+  const currentDivisionConfig = divisionConfig[division.toLowerCase() as keyof typeof divisionConfig] || divisionConfig.tercera;
   const totalStats = playerStats.speed + playerStats.shooting + playerStats.passing + 
                     playerStats.defending + playerStats.goalkeeping;
 
@@ -99,7 +119,7 @@ const PlayerStatsDisplay = ({
         {Object.entries(playerStats).map(([statName, value]) => {
           if (statName === 'overall') return null; // Skip overall for individual display
           
-          const maxStatValue = Math.floor(divisionConfig.maxStats / 5); // Rough max per stat
+          const maxStatValue = Math.floor(currentDivisionConfig.maxStats / 5); // Rough max per stat
           const percentage = Math.min((value / maxStatValue) * 100, 100);
           
           return (
@@ -135,7 +155,7 @@ const PlayerStatsDisplay = ({
         <div className="flex items-center justify-between mb-2">
           <span className="text-gray-400">Division Range:</span>
           <span className="text-gray-300">
-            {divisionConfig.startingStats} - {divisionConfig.maxStats}
+            {currentDivisionConfig.startingStats} - {currentDivisionConfig.maxStats}
           </span>
         </div>
 
@@ -143,8 +163,8 @@ const PlayerStatsDisplay = ({
           <motion.div
             initial={{ width: 0 }}
             animate={{ 
-              width: `${((totalStats - divisionConfig.startingStats) / 
-                       (divisionConfig.maxStats - divisionConfig.startingStats)) * 100}%` 
+              width: `${((totalStats - currentDivisionConfig.startingStats) / 
+                       (currentDivisionConfig.maxStats - currentDivisionConfig.startingStats)) * 100}%` 
             }}
             transition={{ duration: 1 }}
             className="h-3 rounded-full bg-gradient-to-r from-football-green to-football-blue"
@@ -162,7 +182,10 @@ const PlayerStatsDisplay = ({
           
           <div className="text-center">
             <div className="text-3xl font-bold text-football-green mb-2">
-              {penaltyChance !== null ? `${penaltyChance}%` : 'Calculating...'}
+              {penaltyChance || Math.floor(currentDivisionConfig.startingPercentage + 
+                ((totalStats - currentDivisionConfig.startingStats) / 
+                 (currentDivisionConfig.maxStats - currentDivisionConfig.startingStats)) * 
+                (currentDivisionConfig.maxPercentage - currentDivisionConfig.startingPercentage))}%
             </div>
             <div className="text-sm text-gray-400 mb-4">
               Current chance to score a penalty
@@ -172,13 +195,13 @@ const PlayerStatsDisplay = ({
               <div className="text-center">
                 <div className="text-gray-400">Division Min</div>
                 <div className="text-white font-semibold">
-                  {divisionConfig.startingPercentage}%
+                  {currentDivisionConfig.startingPercentage}%
                 </div>
               </div>
               <div className="text-center">
                 <div className="text-gray-400">Division Max</div>
                 <div className="text-white font-semibold">
-                  {divisionConfig.maxPercentage}%
+                  {currentDivisionConfig.maxPercentage}%
                 </div>
               </div>
             </div>

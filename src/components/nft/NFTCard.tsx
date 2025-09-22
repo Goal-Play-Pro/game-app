@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Heart, Eye, Share2, ShoppingCart, Zap } from 'lucide-react';
 import { NFT } from '../../types';
-import { api } from '../../services/api';
+import ApiService from '../../services/api';
 
 interface NFTCardProps {
   nft: NFT;
@@ -28,7 +28,8 @@ const NFTCard = ({ nft, showCollection = true, size = 'md' }: NFTCardProps) => {
     
     setIsLoading(true);
     try {
-      await api.likeNFT(nft.id);
+      // Mock implementation for now
+      console.log('Like NFT:', nft.id);
       setIsLiked(!isLiked);
       setLikes(prev => isLiked ? prev - 1 : prev + 1);
     } catch (error) {

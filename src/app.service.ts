@@ -11,6 +11,8 @@ export class AppService {
       description: 'Backend robusto para plataforma de juegos de fútbol con autenticación de wallets y pagos on-chain',
       status: 'running',
       timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      storageMode: 'postgresql',
       endpoints: {
         health: '/health',
         docs: '/api/docs',

@@ -1,146 +1,133 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { MockApiService } from './mock-api.service';
-import { DatabaseApiService } from './database-api.service';
-import { BaseEntity } from '../types/base.types';
+import { DataSource, Repository, EntityTarget } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
 
-/**
- * Data Adapter Service - Abstraction layer that switches between JSON and Database
- * Maintains the exact same interface as MockApiService
- */
 @Injectable()
 export class DataAdapterService {
   private readonly logger = new Logger(DataAdapterService.name);
-  private readonly useDatabase: boolean;
 
   constructor(
-    private configService: ConfigService,
-    private mockApiService: MockApiService,
-    private databaseApiService: DatabaseApiService,
+    @InjectDataSource()
+    private dataSource: DataSource,
   ) {
-    this.useDatabase = this.configService.get<string>('USE_DATABASE') === 'true';
-    this.logger.log(`Data storage mode: ${this.useDatabase ? 'Database' : 'JSON Files'}`);
+    this.logger.log('📊 Data adapter initialized with TypeORM');
   }
 
-  /**
-   * Find all records
-   */
-  async findAll<T extends BaseEntity>(collection: string): Promise<T[]> {
-    if (this.useDatabase) {
-      return this.databaseApiService.findAll<T>(collection);
-    } else {
-      return this.mockApiService.findAll<T>(collection);
+  private getRepository<T>(entityClass: EntityTarget<T>): Repository<T> {
+    return this.dataSource.getRepository(entityClass);
+  }
+
+  // Helper to serialize/deserialize JSON for SQLite compatibility
+  private serializeJson(data: any): string {
+    if (data === null || data === undefined) return null;
+    if (typeof data === 'string') return data;
+    return JSON.stringify(data);
+  }
+
+  private deserializeJson(data: string): any {
+    if (!data) return null;
+    try {
+      return JSON.parse(data);
+    } catch {
+      return data; // Return as string if not valid JSON
     }
   }
 
-  /**
-   * Find by ID
-   */
-  async findById<T extends BaseEntity>(collection: string, id: string): Promise<T | null> {
-    if (this.useDatabase) {
-      return this.databaseApiService.findById<T>(collection, id);
-    } else {
-      return this.mockApiService.findById<T>(collection, id);
+  async findAll<T>(entityClass: EntityTarget<T>): Promise<T[]> {
+    const repository = this.getRepository(entityClass);
+    const results = await repository.find();
+    return this.processJsonFields(results);
+  }
+
+  async findById<T>(entityClass: EntityTarget<T>, id: string): Promise<T | null> {
+    const repository = this.getRepository(entityClass);
+    const result = await repository.findOne({ where: { id } as any });
+    return result ? this.processJsonFields([result])[0] : null;
+  }
+
+  async findOne<T>(entityClass: EntityTarget<T>, where: any): Promise<T | null> {
+    const repository = this.getRepository(entityClass);
+    const result = await repository.findOne({ where });
+    return result ? this.processJsonFields([result])[0] : null;
+  }
+
+  async findWhere<T>(entityClass: EntityTarget<T>, where: any): Promise<T[]> {
+    const repository = this.getRepository(entityClass);
+    const results = await repository.find({ where });
+    return this.processJsonFields(results);
+  }
+
+  async create<T>(entityClass: EntityTarget<T>, data: any): Promise<T> {
+    const repository = this.getRepository(entityClass);
+    const processedData = this.prepareJsonFields(data);
+    const entity = repository.create(processedData);
+    const saved = await repository.save(entity);
+    return this.processJsonFields([saved as T])[0] as T;
+  }
+
+  async update<T>(entityClass: EntityTarget<T>, id: string, data: any): Promise<T> {
+    const repository = this.getRepository(entityClass);
+    const processedData = this.prepareJsonFields(data);
+    await repository.update(id, processedData);
+    
+    const updated = await repository.findOne({ where: { id } as any });
+    if (!updated) {
+      throw new Error(`Entity ${id} not found after update`);
     }
+    return this.processJsonFields([updated as T])[0] as T;
   }
 
-  /**
-   * Find one with predicate
-   */
-  async findOne<T extends BaseEntity>(collection: string, predicate: (item: T) => boolean): Promise<T | null> {
-    if (this.useDatabase) {
-      return this.databaseApiService.findOne<T>(collection, predicate);
-    } else {
-      return this.mockApiService.findOne<T>(collection, predicate);
+  async delete<T>(entityClass: EntityTarget<T>, id: string): Promise<boolean> {
+    const repository = this.getRepository(entityClass);
+    const result = await repository.delete(id);
+    return result.affected > 0;
+  }
+
+  async count<T>(entityClass: EntityTarget<T>, where?: any): Promise<number> {
+    const repository = this.getRepository(entityClass);
+    return repository.count({ where });
+  }
+
+  async exists<T>(entityClass: EntityTarget<T>, where: any): Promise<boolean> {
+    const repository = this.getRepository(entityClass);
+    const count = await repository.count({ where });
+    return count > 0;
+  }
+
+  // Process JSON fields for SQLite compatibility
+  private processJsonFields<T>(entities: T[]): T[] {
+    return entities.map(entity => {
+      const processed = { ...entity };
+      
+      // Handle common JSON fields
+      if (processed['metadata']) {
+        processed['metadata'] = this.deserializeJson(processed['metadata']);
+      }
+      if (processed['baseStats']) {
+        processed['baseStats'] = this.deserializeJson(processed['baseStats']);
+      }
+      if (processed['response']) {
+        processed['response'] = this.deserializeJson(processed['response']);
+      }
+      
+      return processed;
+    });
+  }
+
+  private prepareJsonFields(data: any): any {
+    const processed = { ...data };
+    
+    // Handle common JSON fields
+    if (processed.metadata) {
+      processed.metadata = this.serializeJson(processed.metadata);
     }
-  }
-
-  /**
-   * Find where with predicate
-   */
-  async findWhere<T extends BaseEntity>(collection: string, predicate: (item: T) => boolean): Promise<T[]> {
-    if (this.useDatabase) {
-      return this.databaseApiService.findWhere<T>(collection, predicate);
-    } else {
-      return this.mockApiService.findWhere<T>(collection, predicate);
+    if (processed.baseStats) {
+      processed.baseStats = this.serializeJson(processed.baseStats);
     }
-  }
-
-  /**
-   * Create new record
-   */
-  async create<T extends BaseEntity>(collection: string, data: Partial<T>): Promise<T> {
-    if (this.useDatabase) {
-      return this.databaseApiService.create<T>(collection, data);
-    } else {
-      return this.mockApiService.create<T>(collection, data);
+    if (processed.response) {
+      processed.response = this.serializeJson(processed.response);
     }
-  }
-
-  /**
-   * Update record
-   */
-  async update<T extends BaseEntity>(collection: string, id: string, data: Partial<T>): Promise<T> {
-    if (this.useDatabase) {
-      return this.databaseApiService.update<T>(collection, id, data);
-    } else {
-      return this.mockApiService.update<T>(collection, id, data);
-    }
-  }
-
-  /**
-   * Delete record
-   */
-  async delete(collection: string, id: string): Promise<boolean> {
-    if (this.useDatabase) {
-      return this.databaseApiService.delete(collection, id);
-    } else {
-      return this.mockApiService.delete(collection, id);
-    }
-  }
-
-  /**
-   * Count records
-   */
-  async count(collection: string): Promise<number> {
-    if (this.useDatabase) {
-      return this.databaseApiService.count(collection);
-    } else {
-      return this.mockApiService.count(collection);
-    }
-  }
-
-  /**
-   * Check if record exists
-   */
-  async exists(collection: string, id: string): Promise<boolean> {
-    if (this.useDatabase) {
-      return this.databaseApiService.exists(collection, id);
-    } else {
-      return this.mockApiService.exists(collection, id);
-    }
-  }
-
-  /**
-   * Switch to database mode
-   */
-  switchToDatabase(): void {
-    process.env.USE_DATABASE = 'true';
-    this.logger.log('Switched to database mode');
-  }
-
-  /**
-   * Switch to JSON mode
-   */
-  switchToJson(): void {
-    process.env.USE_DATABASE = 'false';
-    this.logger.log('Switched to JSON mode');
-  }
-
-  /**
-   * Get current storage mode
-   */
-  getStorageMode(): 'database' | 'json' {
-    return this.useDatabase ? 'database' : 'json';
+    
+    return processed;
   }
 }
