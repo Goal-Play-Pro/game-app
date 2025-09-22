@@ -2,10 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import Web3 from 'web3';
 import { AbiItem } from 'web3-utils';
 import BigNumber from 'bignumber.js';
+import { EtherscanClient, EtherscanClientError } from './etherscan.client';
 
 /**
  * Blockchain Service - Verificación real de transacciones USDT en BSC
- * Integra con BSCScan API para verificar pagos
+ * Integra con la API V2 de Etherscan para verificar pagos
  */
 @Injectable()
 export class BlockchainService {
@@ -15,7 +16,6 @@ export class BlockchainService {
   // USDT Contract en BSC
   private readonly USDT_CONTRACT = '0x55d398326f99059fF775485246999027B3197955';
   private readonly BSC_RPC = 'https://bsc-dataseed1.binance.org/';
-  private readonly BSCSCAN_API = 'https://api.bscscan.com/api';
   
   // ABI mínimo para USDT (solo Transfer event)
   private readonly USDT_ABI: AbiItem[] = [
@@ -40,7 +40,7 @@ export class BlockchainService {
     }
   ];
 
-  constructor() {
+  constructor(private readonly etherscanClient: EtherscanClient) {
     this.web3 = new Web3(this.BSC_RPC);
     this.logger.log('🔗 Blockchain service initialized for BSC');
   }
@@ -172,20 +172,34 @@ export class BlockchainService {
     endBlock?: number
   ): Promise<any[]> {
     try {
-      const apiKey = process.env.BSCSCAN_API_KEY || 'YourApiKeyToken';
-      const url = `${this.BSCSCAN_API}?module=account&action=tokentx&contractaddress=${this.USDT_CONTRACT}&address=${address}&startblock=${startBlock || 0}&endblock=${endBlock || 'latest'}&sort=desc&apikey=${apiKey}`;
-      
-      const response = await fetch(url);
-      const data = await response.json() as { status: string; result: any[]; message?: string };
-      
-      if (data.status === '1') {
-        return data.result;
-      } else {
-        this.logger.warn(`⚠️ BSCScan API error: ${data.message}`);
-        return [];
+      const params: Record<string, string> = {
+        contractaddress: this.USDT_CONTRACT,
+        address,
+        startblock: String(startBlock ?? 0),
+        endblock: String(endBlock ?? 'latest'),
+        sort: 'desc',
+      };
+
+      const result = await this.etherscanClient.request<any[]>({
+        module: 'account',
+        action: 'tokentx',
+        params,
+      });
+
+      if (Array.isArray(result)) {
+        return result;
       }
+
+      this.logger.warn(`⚠️ Unexpected Etherscan response format for tokentx: ${JSON.stringify(result).slice(0, 200)}`);
+      return [];
     } catch (error) {
-      this.logger.error('❌ Error fetching transactions from BSCScan:', error);
+      if (error instanceof EtherscanClientError) {
+        this.logger.error(
+          `❌ Etherscan client error fetching USDT transactions: code=${error.code} context=${JSON.stringify(error.context)}`,
+        );
+      } else {
+        this.logger.error('❌ Unknown error fetching transactions from Etherscan:', error);
+      }
       return [];
     }
   }

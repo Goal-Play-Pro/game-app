@@ -17,9 +17,9 @@ import { ReferralModule } from './modules/referral/referral.module';
 import { GachaModule } from './modules/gacha/gacha.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
 import { BlockchainController } from './controllers/blockchain.controller';
-import { BlockchainService } from './services/blockchain.service';
 import { PaymentMonitorService } from './services/payment-monitor.service';
 import { ScheduleModule } from '@nestjs/schedule';
+import { BlockchainModule } from './services/blockchain.module';
 
 @Module({
   imports: [
@@ -46,11 +46,11 @@ import { ScheduleModule } from '@nestjs/schedule';
     LedgerModule,
     StatisticsModule,
     ReferralModule,
+    BlockchainModule,
   ],
   controllers: [AppController, BlockchainController],
   providers: [
     AppService,
-    BlockchainService,
     PaymentMonitorService,
     {
       provide: APP_GUARD,

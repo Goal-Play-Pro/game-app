@@ -7,16 +7,17 @@ import { ProductVariant } from '../../database/entities/product-variant.entity';
 import { User } from '../../database/entities/user.entity';
 import { GachaModule } from '../gacha/gacha.module';
 import { ReferralModule } from '../referral/referral.module';
-import { BlockchainService } from '../../services/blockchain.service';
+import { BlockchainModule } from '../../services/blockchain.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Order, ProductVariant, User]),
     GachaModule,
     ReferralModule,
+    BlockchainModule,
   ],
   controllers: [OrderController],
-  providers: [OrderService, BlockchainService],
+  providers: [OrderService],
   exports: [OrderService],
 })
 export class OrderModule {}

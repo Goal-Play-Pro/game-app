@@ -35,18 +35,26 @@ services:
         value: https://game.goalplay.pro
       - key: FRONTEND_URL
         value: https://game.goalplay.pro
-      - key: BSCSCAN_API_KEY
-        value: YourBSCScanApiKeyHere
+      - key: ETHERSCAN_API_KEY
+        value: W6GY51C3NBYH7IJ2MY34F2MCHM8AFP9QBX
+      - key: ETHERSCAN_BASE_URL
+        value: https://api.etherscan.io/v2/api
+      - key: ETHERSCAN_DEFAULT_CHAINID
+        value: "56"
+      - key: ETHERSCAN_MAX_CPS
+        value: "5"
+      - key: ETHERSCAN_MAX_DAILY
+        value: "100000"
       - key: BSC_RPC_URL
         value: https://bsc-dataseed1.binance.org/
       - key: ETH_RECEIVING_WALLET_1
-        value: 0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000
+        value: 0xa43A611B20525fc7EE6B4071d89168b46A8Cb1F0
       - key: BSC_RECEIVING_WALLET_1
-        value: 0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000
+        value: 0xa43A611B20525fc7EE6B4071d89168b46A8Cb1F0
       - key: POLYGON_RECEIVING_WALLET_1
-        value: 0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000
+        value: 0xa43A611B20525fc7EE6B4071d89168b46A8Cb1F0
       - key: ARB_RECEIVING_WALLET_1
-        value: 0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000
+        value: 0xa43A611B20525fc7EE6B4071d89168b46A8Cb1F0
       - key: SOL_RECEIVING_WALLET_1
         value: 11111111111111111111111111111112
 
