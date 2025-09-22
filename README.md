@@ -41,8 +41,8 @@ cp .env.example .env
 ```bash
 # PostgreSQL Database Setup (recommended for staging/production)
 createdb goalplay
-# Or use Docker:
-docker run --name goalplay-postgres -e POSTGRES_PASSWORD=password -e POSTGRES_USER=goalplay -e POSTGRES_DB=goalplay -p 5432:5432 -d postgres:14
+# Or create a dedicated role if needed:
+# createuser goalplay --pwprompt
 
 # SQLite (optional for local development)
 # DB_TYPE=sqlite will store data in ./data/goalplay.db

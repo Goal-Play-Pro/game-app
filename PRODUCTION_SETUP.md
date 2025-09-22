@@ -53,8 +53,6 @@
 # PostgreSQL (recomendado para staging/producción)
 # createuser goalplay --pwprompt
 # createdb goalplay --owner=goalplay
-# o usar Docker:
-docker run --name goalplay-postgres -e POSTGRES_PASSWORD=password -e POSTGRES_USER=goalplay -e POSTGRES_DB=goalplay -p 5432:5432 -d postgres:14
 
 # SQLite (solo para desarrollo local)
 # Se crea automáticamente en ./data/goalplay.db cuando DB_TYPE=sqlite
@@ -176,9 +174,6 @@ INSERT INTO ledger_entries VALUES
 
 ### **Desarrollo:**
 ```bash
-# Base de datos
-docker-compose up postgres -d
-
 # Backend
 npm run start:backend:dev
 
