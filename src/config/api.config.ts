@@ -1,36 +1,44 @@
 // Configuración centralizada de la API
 
-// Función robusta para obtener variables de entorno
-const getEnvVar = (key: string, defaultValue: string = '') => {
-  // En Node.js (backend), usar process.env
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env[key] || defaultValue;
-  }
-  
-  // En el navegador con Vite
-  if (typeof window !== 'undefined') {
-    try {
-      // Verificar si import.meta está disponible
-      if (typeof globalThis !== 'undefined' && (globalThis as any).importMeta) {
-        return (globalThis as any).importMeta.env[key] || defaultValue;
-      }
-      
-      // Fallback para Vite - usar eval para evitar errores de compilación
-      const metaEnv = eval('typeof import !== "undefined" && import.meta && import.meta.env');
-      if (metaEnv && metaEnv[key]) {
-        return metaEnv[key];
-      }
-    } catch (e) {
-      // Fallback silencioso
+type EnvMap = Record<string, string | undefined> | undefined;
+
+const resolveViteEnv = (): EnvMap => {
+  try {
+    // Durante el build y en el navegador, Vite inyecta import.meta.env
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+      return (import.meta as any).env as EnvMap;
     }
+  } catch (error) {
+    // Ignorar si no está disponible (por ejemplo, en Node CommonJS)
   }
-  
+  return undefined;
+};
+
+const viteEnv = resolveViteEnv();
+
+// Función robusta para obtener variables de entorno
+const getEnvVar = (key: string, defaultValue: string = ''): string => {
+  // En Node.js (SSR, tests, etc.), usar process.env
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key] as string;
+  }
+
+  // En el navegador con Vite
+  if (viteEnv && viteEnv[key] !== undefined) {
+    return viteEnv[key] as string;
+  }
+
+  // Último intento: leer de window.__APP_ENV__ (por si se inyecta manualmente)
+  if (typeof window !== 'undefined' && (window as any).__APP_ENV__?.[key]) {
+    return (window as any).__APP_ENV__[key];
+  }
+
   return defaultValue;
 };
 
 export const API_CONFIG = {
-  // URL base de la API - CAMBIAR ESTA URL PARA CONECTAR AL BACKEND REAL
-  BASE_URL: getEnvVar('VITE_API_URL', 'https://tu-backend-real.ondigitalocean.app'),
+  // URL base de la API: por defecto usa el proxy /api del frontend
+  BASE_URL: getEnvVar('VITE_API_URL', '/api'),
   
   // Configuración de timeouts
   TIMEOUT: 10000,
