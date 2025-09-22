@@ -66,9 +66,14 @@ const toBoolean = (value?: string, defaultValue = false): boolean => {
         const isProduction = configService.get<string>('NODE_ENV') === 'production';
         const isPostgres = rawDbType === 'postgres' || rawDbType === 'postgresql' || !!databaseUrl;
 
+        const synchronize = toBoolean(
+          configService.get<string>('DB_SYNCHRONIZE'),
+          !isProduction,
+        );
+
         const baseConfig: Partial<TypeOrmModuleOptions> = {
           entities,
-          synchronize: !isProduction,
+          synchronize,
           logging: configService.get<string>('NODE_ENV') === 'development',
           autoLoadEntities: true,
         };
