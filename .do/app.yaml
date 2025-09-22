@@ -1,11 +1,13 @@
-name: gol-play
+name: game-app
+region: blr1
 services:
   # Backend API Service
   - name: backend
     source_dir: .
     github:
-      repo: tu-usuario/gol-play
+      repo: Goal-Play-Pro/game-app
       branch: main
+      deploy_on_push: true
     run_command: npm run start:backend:prod
     build_command: npm ci && npm run build:backend
     environment_slug: node-js
@@ -17,53 +19,73 @@ services:
       - path: /health
     envs:
       - key: NODE_ENV
+        scope: RUN_TIME
         value: production
       - key: PORT
+        scope: RUN_TIME
         value: "3001"
       - key: DB_TYPE
+        scope: RUN_TIME
         value: postgres
       - key: DATABASE_URL
-        scope: RUN_AND_BUILD_TIME
+        scope: RUN_TIME
         value: ${game-app-db.DATABASE_URL}
       - key: DB_SSL
+        scope: RUN_TIME
         value: "true"
       - key: DB_SSL_REJECT_UNAUTHORIZED
+        scope: RUN_TIME
         value: "false"
       - key: JWT_SECRET
+        scope: RUN_TIME
         value: 6A9p/j03HVp3oHTq4uwDfJ81MRddUajbUfhDGaOUIEc=
       - key: CORS_ORIGIN
+        scope: RUN_TIME
         value: https://game.goalplay.pro
       - key: FRONTEND_URL
+        scope: RUN_TIME
         value: https://game.goalplay.pro
       - key: ETHERSCAN_API_KEY
+        scope: RUN_TIME
         value: W6GY51C3NBYH7IJ2MY34F2MCHM8AFP9QBX
       - key: ETHERSCAN_BASE_URL
+        scope: RUN_TIME
         value: https://api.etherscan.io/v2/api
       - key: ETHERSCAN_DEFAULT_CHAINID
+        scope: RUN_TIME
         value: "56"
       - key: ETHERSCAN_MAX_CPS
+        scope: RUN_TIME
         value: "5"
       - key: ETHERSCAN_MAX_DAILY
+        scope: RUN_TIME
         value: "100000"
       - key: BSC_RPC_URL
+        scope: RUN_TIME
         value: https://bsc-dataseed1.binance.org/
       - key: ETH_RECEIVING_WALLET_1
+        scope: RUN_TIME
         value: 0xa43A611B20525fc7EE6B4071d89168b46A8Cb1F0
       - key: BSC_RECEIVING_WALLET_1
+        scope: RUN_TIME
         value: 0xa43A611B20525fc7EE6B4071d89168b46A8Cb1F0
       - key: POLYGON_RECEIVING_WALLET_1
+        scope: RUN_TIME
         value: 0xa43A611B20525fc7EE6B4071d89168b46A8Cb1F0
       - key: ARB_RECEIVING_WALLET_1
+        scope: RUN_TIME
         value: 0xa43A611B20525fc7EE6B4071d89168b46A8Cb1F0
       - key: SOL_RECEIVING_WALLET_1
-        value: 11111111111111111111111111111112
+        scope: RUN_TIME
+        value: "11111111111111111111111111111112"
 
   # Frontend Static Site
   - name: frontend
     source_dir: .
     github:
-      repo: tu-usuario/gol-play
+      repo: Goal-Play-Pro/game-app
       branch: main
+      deploy_on_push: true
     build_command: npm ci && npm run build:frontend
     run_command: npm run preview -- --port 3000 --host 0.0.0.0
     environment_slug: node-js
@@ -74,6 +96,7 @@ services:
       - path: /
     envs:
       - key: NODE_ENV
+        scope: RUN_TIME
         value: production
       - key: VITE_API_URL
         scope: RUN_AND_BUILD_TIME
@@ -83,10 +106,7 @@ services:
 databases:
   - name: game-app-db
     engine: PG
-    version: "17"
-    size: basic
-    num_nodes: 1
+    cluster_name: game-app-db
     db_name: goalplay
-    user: goalplay
-    trusted_sources:
-      - backend
+    db_user: goalplay
+    production: true
