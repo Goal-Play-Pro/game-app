@@ -7,6 +7,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import PlayerStatsDisplay from '../components/player/PlayerStatsDisplay';
 import FarmingInterface from '../components/player/FarmingInterface';
 import { SessionType, PenaltyDirection } from '../types';
+import { useAuthStatus } from '../hooks/useAuthStatus';
 
 const GamePage = () => {
   const [gameMode, setGameMode] = useState<'select' | 'playing' | 'result'>('select');
@@ -16,6 +17,7 @@ const GamePage = () => {
   const [penaltyPower, setPenaltyPower] = useState<number>(75);
   const [gameResult, setGameResult] = useState<any>(null);
   const [showPlayerDetails, setShowPlayerDetails] = useState<string>('');
+  const isAuthenticated = useAuthStatus();
 
   const queryClient = useQueryClient();
 
@@ -23,7 +25,8 @@ const GamePage = () => {
   const { data: ownedPlayers, isLoading: playersLoading } = useQuery({
     queryKey: ['owned-players'],
     queryFn: ApiService.getOwnedPlayers,
-    retry: 1,
+    enabled: isAuthenticated,
+    retry: isAuthenticated ? 1 : false,
     retryDelay: 1000,
   });
 
@@ -31,8 +34,9 @@ const GamePage = () => {
   const { data: sessions, isLoading: sessionsLoading } = useQuery({
     queryKey: ['penalty-sessions'],
     queryFn: ApiService.getUserSessions,
-    refetchInterval: 5000, // Refetch every 5 seconds for real-time updates
-    retry: 1,
+    enabled: isAuthenticated,
+    refetchInterval: isAuthenticated ? 5000 : false,
+    retry: isAuthenticated ? 1 : false,
     retryDelay: 1000,
   });
 
@@ -40,14 +44,14 @@ const GamePage = () => {
   const { data: farmingStatus } = useQuery({
     queryKey: ['farming-status', selectedPlayer],
     queryFn: () => ApiService.getFarmingStatus(selectedPlayer),
-    enabled: !!selectedPlayer,
+    enabled: isAuthenticated && !!selectedPlayer,
   });
 
   // Fetch player progression for selected player
   const { data: playerProgression } = useQuery({
     queryKey: ['player-progression', selectedPlayer],
     queryFn: () => ApiService.getPlayerProgression(selectedPlayer),
-    enabled: !!selectedPlayer,
+    enabled: isAuthenticated && !!selectedPlayer,
   });
   // Create penalty session mutation
   const createSessionMutation = useMutation({
@@ -118,6 +122,20 @@ const GamePage = () => {
     setPenaltyDirection(null);
     setPenaltyPower(75);
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="pt-24 pb-20 flex justify-center items-center min-h-screen">
+        <div className="glass-dark rounded-xl p-10 text-center space-y-4 max-w-md">
+          <Trophy className="w-12 h-12 text-gray-500 mx-auto" />
+          <h2 className="text-2xl font-display text-white">Connect your wallet</h2>
+          <p className="text-gray-400">
+            Sign in to select players and compete in penalty shootouts.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (playersLoading) {
     return (

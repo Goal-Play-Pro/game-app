@@ -6,37 +6,41 @@ import ApiService from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import PlayerStatsDisplay from '../components/player/PlayerStatsDisplay';
 import FarmingInterface from '../components/player/FarmingInterface';
+import { useAuthStatus } from '../hooks/useAuthStatus';
 
 const InventoryPage = () => {
   const [activeTab, setActiveTab] = useState<'players' | 'kits' | 'stats' | 'farming'>('players');
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
+  const isAuthenticated = useAuthStatus();
 
   // Fetch user's owned players
   const { data: ownedPlayers, isLoading: playersLoading } = useQuery({
     queryKey: ['owned-players'],
     queryFn: ApiService.getOwnedPlayers,
+    enabled: isAuthenticated,
+    retry: isAuthenticated ? 3 : false,
   });
 
   // Fetch player progression for selected player
   const { data: playerProgression, isLoading: progressionLoading } = useQuery({
     queryKey: ['player-progression', selectedPlayer],
     queryFn: () => ApiService.getPlayerProgression(selectedPlayer),
-    enabled: !!selectedPlayer,
+    enabled: isAuthenticated && !!selectedPlayer,
   });
 
   // Fetch player kit for selected player
   const { data: playerKit, isLoading: kitLoading } = useQuery({
     queryKey: ['player-kit', selectedPlayer],
     queryFn: () => ApiService.getPlayerKit(selectedPlayer),
-    enabled: !!selectedPlayer,
+    enabled: isAuthenticated && !!selectedPlayer,
   });
 
   // Fetch farming status for selected player
   const { data: farmingStatus, isLoading: farmingLoading } = useQuery({
     queryKey: ['farming-status', selectedPlayer],
     queryFn: () => ApiService.getFarmingStatus(selectedPlayer),
-    enabled: !!selectedPlayer,
-    refetchInterval: 5000, // Check every 5 seconds
+    enabled: isAuthenticated && !!selectedPlayer,
+    refetchInterval: isAuthenticated && !!selectedPlayer ? 5000 : false,
   });
 
   const tabs = [
@@ -53,6 +57,20 @@ const InventoryPage = () => {
     if (level >= 5) return 'from-green-400 to-emerald-500';
     return 'from-gray-400 to-gray-500';
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="pt-24 pb-20 flex justify-center items-center min-h-screen">
+        <div className="glass-dark rounded-xl p-10 text-center space-y-4 max-w-md">
+          <Users className="w-12 h-12 text-gray-500 mx-auto" />
+          <h2 className="text-2xl font-display text-white">Connect your wallet</h2>
+          <p className="text-gray-400">
+            Sign in with your wallet to view and manage your player inventory.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (playersLoading) {
     return (
