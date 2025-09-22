@@ -158,6 +158,7 @@ export class ReferralService {
         referredUserId: order.userId,
         referredWallet: referralRegistration.referredWallet,
         orderId: orderId,
+        referralCode: referralRegistration.referralCode,
         orderAmount: orderAmount.toString(),
         commissionAmount: commissionAmount.toString(),
         commissionPercentage: this.COMMISSION_PERCENTAGE,
@@ -202,7 +203,7 @@ export class ReferralService {
 
       // Update referral code total commissions
       const referralCode = await this.referralCodeRepository.findOne({
-        where: { userId: commission.referrerUserId }
+        where: { code: commission.referralCode }
       });
 
       if (referralCode) {

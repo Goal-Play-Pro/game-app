@@ -23,6 +23,9 @@ export class ReferralCommission {
   @Column()
   orderId: string;
 
+  @Column()
+  referralCode: string;
+
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   orderAmount: string;
 
@@ -58,6 +61,6 @@ export class ReferralCommission {
   order: Order;
 
   @ManyToOne(() => ReferralCode, code => code.commissions)
-  @JoinColumn({ name: 'referrerUserId', referencedColumnName: 'userId' })
-  referralCode: ReferralCode;
+  @JoinColumn({ name: 'referralCode', referencedColumnName: 'code' })
+  referralCodeEntity: ReferralCode;
 }
