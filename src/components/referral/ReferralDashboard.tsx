@@ -15,22 +15,25 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ApiService from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ReferralLink from './ReferralLink';
+import { useAuthStatus } from '../../hooks/useAuthStatus';
 
 const ReferralDashboard = () => {
   const [copySuccess, setCopySuccess] = useState(false);
   const queryClient = useQueryClient();
+  const isAuthenticated = useAuthStatus();
 
   // Fetch referral stats
   const { data: referralStats, isLoading: statsLoading, error: statsError } = useQuery({
     queryKey: ['referral-stats'],
     queryFn: () => ApiService.getReferralStats(),
+    enabled: isAuthenticated,
     retry: false,
   });
 
-  // Fetch user's referral code
   const { data: referralCode, isLoading: codeLoading } = useQuery({
     queryKey: ['my-referral-code'],
     queryFn: () => ApiService.getMyReferralCode(),
+    enabled: isAuthenticated,
     retry: false,
   });
 
@@ -94,6 +97,20 @@ const ReferralDashboard = () => {
       }
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="glass-dark rounded-xl p-8 text-center">
+        <div className="w-16 h-16 bg-gradient-to-r from-football-green to-football-blue rounded-full flex items-center justify-center mx-auto mb-6">
+          <Users className="w-8 h-8 text-white" />
+        </div>
+        <h3 className="text-2xl font-bold text-white mb-4">Connect your wallet</h3>
+        <p className="text-gray-400 mb-6">
+          Sign in with your wallet to access referral stats and generate your code.
+        </p>
+      </div>
+    );
+  }
 
   if (statsLoading) {
     return (

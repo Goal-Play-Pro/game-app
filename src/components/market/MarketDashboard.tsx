@@ -12,31 +12,36 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import ApiService from '../../services/api';
+import { useAuthStatus } from '../../hooks/useAuthStatus';
 import LoadingSpinner from '../common/LoadingSpinner';
 
 const MarketDashboard = () => {
-  // Fetch comprehensive market data
+  const isAuthenticated = useAuthStatus();
+
   const { data: marketData, isLoading: marketLoading } = useQuery({
     queryKey: ['market-data'],
     queryFn: ApiService.getMarketData,
+    enabled: isAuthenticated,
     refetchInterval: 30000, // Refresh every 30 seconds
-    retry: 1,
+    retry: isAuthenticated ? 1 : false,
     retryDelay: 1000,
   });
 
   const { data: globalStats, isLoading: statsLoading } = useQuery({
     queryKey: ['global-statistics'],
     queryFn: ApiService.getGlobalStatistics,
-    refetchInterval: 60000, // Refresh every minute
-    retry: 1,
+    enabled: isAuthenticated,
+    refetchInterval: 60000,
+    retry: isAuthenticated ? 1 : false,
     retryDelay: 1000,
   });
 
   const { data: systemHealth } = useQuery({
     queryKey: ['system-health'],
     queryFn: ApiService.getSystemHealth,
-    refetchInterval: 10000, // Refresh every 10 seconds
-    retry: 1,
+    enabled: isAuthenticated,
+    refetchInterval: 10000,
+    retry: isAuthenticated ? 1 : false,
     retryDelay: 1000,
   });
 
@@ -58,6 +63,19 @@ const MarketDashboard = () => {
     }
     return num.toString();
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="glass-dark rounded-xl p-6">
+        <div className="flex flex-col items-center justify-center py-12 space-y-3">
+          <TrendingUp className="w-12 h-12 text-gray-500" />
+          <p className="text-gray-400 text-center">
+            Connect your wallet to view live market analytics and your recent orders.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (marketLoading || statsLoading) {
     return (

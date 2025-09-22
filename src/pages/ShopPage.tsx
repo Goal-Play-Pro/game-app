@@ -10,6 +10,7 @@ import PlayersGallery from '../components/player/PlayersGallery';
 import PaymentModal from '../components/payment/PaymentModal';
 import { ChainType } from '../types';
 import { useReferral } from '../hooks/useReferral';
+import { useAuthStatus } from '../hooks/useAuthStatus';
 
 const formatPrice = (price: string | number) => {
   return parseFloat(price.toString()).toLocaleString();
@@ -24,6 +25,7 @@ const ShopPage = () => {
   const [pendingOrder, setPendingOrder] = useState<any>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const { registerPendingReferral } = useReferral();
+  const isAuthenticated = useAuthStatus();
 
   const queryClient = useQueryClient();
 
@@ -48,13 +50,17 @@ const ShopPage = () => {
   const { data: orders, isLoading: ordersLoading } = useQuery({
     queryKey: ['user-orders'],
     queryFn: ApiService.getUserOrders,
+    enabled: isAuthenticated,
+    retry: isAuthenticated ? 3 : false,
   });
 
   // Fetch market data
   const { data: marketData, isLoading: marketLoading } = useQuery({
     queryKey: ['market-data'],
     queryFn: ApiService.getMarketData,
+    enabled: isAuthenticated,
     refetchInterval: 30000,
+    retry: isAuthenticated ? 1 : false,
   });
 
   // Fetch real players data
@@ -240,7 +246,12 @@ const ShopPage = () => {
             <div className="glass-dark rounded-xl p-6">
               <h3 className="text-xl font-semibold text-white mb-6">My Orders</h3>
               
-              {ordersLoading ? (
+              {!isAuthenticated ? (
+                <div className="text-center py-12 space-y-3">
+                  <ShoppingBag className="w-16 h-16 text-gray-500 mx-auto" />
+                  <p className="text-gray-400">Connect your wallet to view your order history.</p>
+                </div>
+              ) : ordersLoading ? (
                 <div className="flex justify-center py-8">
                   <LoadingSpinner text="Loading orders..." />
                 </div>
@@ -481,7 +492,11 @@ const ShopPage = () => {
             >
               <h3 className="text-xl font-semibold text-white mb-6">Recent Orders</h3>
               
-              {ordersLoading ? (
+              {!isAuthenticated ? (
+                <div className="text-center py-4 text-gray-400 text-sm">
+                  Connect your wallet to see your recent orders.
+                </div>
+              ) : ordersLoading ? (
                 <div className="flex justify-center py-4">
                   <LoadingSpinner size="sm" text="Loading orders..." />
                 </div>

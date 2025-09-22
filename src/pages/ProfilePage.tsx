@@ -20,9 +20,11 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import ReferralDashboard from '../components/referral/ReferralDashboard';
 import WalletManager from '../components/wallet/WalletManager';
 import { CompleteUserProfile } from '../services/api';
+import { useAuthStatus } from '../hooks/useAuthStatus';
 
 const ProfilePage = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'referrals' | 'wallets' | 'history' | 'settings'>('overview');
+  const isAuthenticated = useAuthStatus();
 
   // Mock user data - in real app this would come from auth context
   const currentUser = {
@@ -44,33 +46,39 @@ const ProfilePage = () => {
   const { data: completeProfile, isLoading: profileLoading } = useQuery<CompleteUserProfile>({
     queryKey: ['complete-user-profile'],
     queryFn: () => ApiService.getCompleteUserProfile(),
-    refetchInterval: 30000,
+    enabled: isAuthenticated,
+    refetchInterval: isAuthenticated ? 30000 : false,
   });
 
   const { data: ownedPlayers, isLoading: playersLoading } = useQuery({
     queryKey: ['owned-players'],
     queryFn: ApiService.getOwnedPlayers,
+    enabled: isAuthenticated,
   });
 
   const { data: userSessions, isLoading: sessionsLoading } = useQuery({
     queryKey: ['user-sessions'],
     queryFn: ApiService.getUserSessions,
+    enabled: isAuthenticated,
   });
 
   const { data: userOrders, isLoading: ordersLoading } = useQuery({
     queryKey: ['user-orders'],
     queryFn: ApiService.getUserOrders,
+    enabled: isAuthenticated,
   });
 
   const { data: transactions, isLoading: transactionsLoading } = useQuery({
     queryKey: ['user-transactions'],
     queryFn: () => ApiService.getTransactions(),
+    enabled: isAuthenticated,
   });
 
   // Fetch all user wallets
   const { data: userWallets, isLoading: walletsLoading } = useQuery({
     queryKey: ['user-wallets'],
     queryFn: ApiService.getAllUserWallets,
+    enabled: isAuthenticated,
   });
   const tabs = [
     { id: 'overview', label: 'Overview', icon: User },
@@ -114,6 +122,20 @@ const ProfilePage = () => {
   const completedGames = userSessions?.filter(s => s.status === 'completed').length || 0;
   const winRate = completedGames > 0 ? ((completedGames * 0.7) * 100).toFixed(1) : '0'; // Mock win rate
   const totalSpent = completeProfile?.totalSpent || userOrders?.reduce((sum, order) => sum + parseFloat(order.totalPriceUSDT), 0) || 0;
+
+  if (!isAuthenticated) {
+    return (
+      <div className="pt-24 pb-20 flex justify-center items-center min-h-screen">
+        <div className="glass-dark rounded-xl p-10 text-center space-y-4 max-w-md">
+          <Users className="w-12 h-12 text-gray-500 mx-auto" />
+          <h2 className="text-2xl font-display text-white">Connect your wallet</h2>
+          <p className="text-gray-400">
+            Sign in with your wallet to view your profile, orders, and referral statistics.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pt-16 pb-20">

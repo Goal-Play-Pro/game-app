@@ -370,6 +370,22 @@ const FALLBACK_DATA = {
 
 // API Service Class
 export class ApiService {
+  static getAuthToken(): string | null {
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      return window.localStorage.getItem(API_CONFIG.AUTH.TOKEN_KEY);
+    }
+
+    if (typeof process !== 'undefined' && process.env && process.env.AUTH_TOKEN) {
+      return process.env.AUTH_TOKEN;
+    }
+
+    return null;
+  }
+
+  static isAuthenticated(): boolean {
+    return !!this.getAuthToken();
+  }
+
   // Función para cambiar la URL base de la API
   static setBaseUrl(newUrl: string) {
     API_CONFIG.BASE_URL = newUrl;
@@ -626,10 +642,17 @@ export class ApiService {
 
   static async getMarketData() {
     try {
-      const [products, orders] = await Promise.all([
-        this.getProducts(),
-        this.getUserOrders()
-      ]);
+      const products = await this.getProducts();
+
+      if (!this.isAuthenticated()) {
+        return {
+          products,
+          recentOrders: [],
+          totalVolume: 0,
+        };
+      }
+
+      const orders = await this.getUserOrders();
       
       return {
         products,
@@ -647,6 +670,18 @@ export class ApiService {
   }
 
   static async getCompleteUserProfile(): Promise<CompleteUserProfile> {
+    if (!this.isAuthenticated()) {
+      return {
+        wallets: [],
+        players: [],
+        orders: [],
+        totalSpent: 0,
+        totalPlayers: 0,
+        transactions: [],
+        referralStats: { totalCommissions: '0.00' },
+      };
+    }
+
     try {
       const [wallets, players, orders] = await Promise.all([
         this.getAllUserWallets(),
