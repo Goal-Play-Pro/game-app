@@ -40,7 +40,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     target: 'es2020',
-    outDir: 'dist',
+    outDir: 'dist/frontend',
     sourcemap: true,
     rollupOptions: {
       input: {

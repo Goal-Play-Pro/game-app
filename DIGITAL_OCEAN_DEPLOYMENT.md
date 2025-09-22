@@ -134,7 +134,7 @@ Docs:     https://api.goalplay.app/api/docs
   "scripts": {
     "build:backend": "nest build",
     "build:frontend": "vite build",
-    "start:backend:prod": "node dist/main.js",
+    "start:backend:prod": "node dist/backend/main.js",
     "start:prod": "npm run start:backend:prod"
   }
 }
