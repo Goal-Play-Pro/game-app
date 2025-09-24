@@ -268,7 +268,7 @@ export class AuthService {
 
     // Update user with new metadata
     await this.userRepository.update(userId, {
-      metadata: JSON.stringify(updatedMetadata),
+      metadata: JSON.stringify(updatedMetadata) as any,
       updatedAt: new Date()
     });
 
