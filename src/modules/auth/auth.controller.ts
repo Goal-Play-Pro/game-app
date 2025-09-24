@@ -1,6 +1,8 @@
 import { Controller, Post, Body, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpStatus, Get, Put, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CreateSiweChallenge, VerifySiweSignature, CreateSolanaChallenge, VerifySolanaSignature } from './dto/auth.dto';
 
 @ApiTags('auth')
@@ -34,5 +36,21 @@ export class AuthController {
   @ApiResponse({ status: HttpStatus.OK, description: 'Authentication successful' })
   async verifySolanaSignature(@Body() dto: VerifySolanaSignature) {
     return this.authService.verifySolanaSignature(dto.message, dto.signature, dto.publicKey);
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get user profile' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'User profile retrieved successfully' })
+  async getUserProfile(@Request() req: any) {
+    return this.authService.getUserProfile(req.user.sub);
+  }
+
+  @Put('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Update user profile' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'User profile updated successfully' })
+  async updateUserProfile(@Request() req: any, @Body() profileData: any) {
+    return this.authService.updateUserProfile(req.user.sub, profileData);
   }
 }

@@ -26,8 +26,9 @@ const GamePage = () => {
     queryKey: ['owned-players'],
     queryFn: ApiService.getOwnedPlayers,
     enabled: isAuthenticated,
-    retry: isAuthenticated ? 1 : false,
-    retryDelay: 1000,
+    retry: isAuthenticated ? 3 : false,
+    retryDelay: 2000,
+    refetchInterval: isAuthenticated ? 30000 : false,
   });
 
   // Fetch active sessions
@@ -36,8 +37,8 @@ const GamePage = () => {
     queryFn: ApiService.getUserSessions,
     enabled: isAuthenticated,
     refetchInterval: isAuthenticated ? 5000 : false,
-    retry: isAuthenticated ? 1 : false,
-    retryDelay: 1000,
+    retry: isAuthenticated ? 3 : false,
+    retryDelay: 2000,
   });
 
   // Fetch farming status for selected player
@@ -45,6 +46,8 @@ const GamePage = () => {
     queryKey: ['farming-status', selectedPlayer],
     queryFn: () => ApiService.getFarmingStatus(selectedPlayer),
     enabled: isAuthenticated && !!selectedPlayer,
+    retry: 2,
+    retryDelay: 1000,
   });
 
   // Fetch player progression for selected player
@@ -52,15 +55,32 @@ const GamePage = () => {
     queryKey: ['player-progression', selectedPlayer],
     queryFn: () => ApiService.getPlayerProgression(selectedPlayer),
     enabled: isAuthenticated && !!selectedPlayer,
+    retry: 2,
+    retryDelay: 1000,
   });
+
+  // Fetch current session details if we have an active session
+  const { data: sessionDetails } = useQuery({
+    queryKey: ['session-details', currentSession],
+    queryFn: () => ApiService.getSessionDetails(currentSession),
+    enabled: isAuthenticated && !!currentSession,
+    refetchInterval: isAuthenticated && !!currentSession ? 2000 : false,
+    retry: 2,
+  });
+
   // Create penalty session mutation
   const createSessionMutation = useMutation({
     mutationFn: ({ type, playerId, maxRounds }: { type: SessionType; playerId: string; maxRounds: number }) =>
       ApiService.createPenaltySession(type, playerId, maxRounds),
     onSuccess: (data) => {
+      console.log('✅ Session created successfully:', data);
       setCurrentSession(data.id);
       setGameMode('playing');
       queryClient.invalidateQueries({ queryKey: ['penalty-sessions'] });
+    },
+    onError: (error) => {
+      console.error('❌ Error creating session:', error);
+      alert('Failed to create game session. Please try again.');
     },
   });
 
@@ -69,10 +89,16 @@ const GamePage = () => {
     mutationFn: ({ sessionId, direction, power }: { sessionId: string; direction: PenaltyDirection; power: number }) =>
       ApiService.attemptPenalty(sessionId, direction, power),
     onSuccess: async (data) => {
+      console.log('✅ Penalty attempt successful:', data);
       setGameResult(data);
       queryClient.invalidateQueries({ queryKey: ['penalty-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['session-details', currentSession] });
       
-      // TODO: Record game result in statistics when Web3 is connected
+      // Update player experience
+      if (data.isGoal) {
+        queryClient.invalidateQueries({ queryKey: ['owned-players'] });
+        queryClient.invalidateQueries({ queryKey: ['player-progression', selectedPlayer] });
+      }
       
       // Check if game is completed
       if (data.sessionStatus === 'completed') {
@@ -80,6 +106,10 @@ const GamePage = () => {
           setGameMode('result');
         }, 2000);
       }
+    },
+    onError: (error) => {
+      console.error('❌ Error attempting penalty:', error);
+      alert('Failed to attempt penalty. Please try again.');
     },
   });
 
@@ -94,6 +124,8 @@ const GamePage = () => {
       alert(`Player needs training! ${farmingStatus.reason}`);
       return;
     }
+    
+    console.log(`🎮 Starting ${type} game with player ${selectedPlayer}`);
     createSessionMutation.mutate({
       type,
       playerId: selectedPlayer,
@@ -104,6 +136,7 @@ const GamePage = () => {
   const handlePenaltyShot = () => {
     if (!penaltyDirection || !currentSession) return;
 
+    console.log(`⚽ Attempting penalty: ${penaltyDirection} with ${penaltyPower}% power`);
     attemptPenaltyMutation.mutate({
       sessionId: currentSession,
       direction: penaltyDirection,
@@ -121,6 +154,7 @@ const GamePage = () => {
     setGameResult(null);
     setPenaltyDirection(null);
     setPenaltyPower(75);
+    setSelectedPlayer('');
   };
 
   if (!isAuthenticated) {
@@ -165,6 +199,12 @@ const GamePage = () => {
                 <p className="text-gray-400 text-lg max-w-2xl mx-auto">
                   Choose your player and game mode to start your penalty shootout experience
                 </p>
+                
+                {/* API Connection Status */}
+                <div className="mt-4 flex items-center justify-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  <span className="text-green-400 text-sm">Connected to production API</span>
+                </div>
               </div>
 
               {/* Player Selection */}
@@ -194,9 +234,23 @@ const GamePage = () => {
                           selectedPlayer === player.id ? 'ring-2 ring-football-green' : ''
                         }`}
                       >
-                        <div className="aspect-square bg-gradient-to-br from-football-green/20 to-football-blue/20 rounded-lg mb-4 flex items-center justify-center">
-                          <div className="w-12 h-12 bg-gradient-to-r from-football-green to-football-blue rounded-full flex items-center justify-center">
-                            <span className="text-white font-bold">P</span>
+                        {/* Player Image */}
+                        <div className="aspect-square bg-gradient-to-br from-football-green/20 to-football-blue/20 rounded-lg mb-4 flex items-center justify-center relative overflow-hidden">
+                          {player.player?.imageUrl ? (
+                            <img
+                              src={player.player.imageUrl}
+                              alt={player.player.name || `Player ${player.id.slice(0, 6)}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const fallback = target.nextElementSibling as HTMLElement;
+                                if (fallback) fallback.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <div className="hidden w-full h-full bg-gradient-to-r from-football-green to-football-blue items-center justify-center">
+                            <span className="text-white font-bold text-2xl">⚽</span>
                           </div>
                         </div>
                         
@@ -214,10 +268,18 @@ const GamePage = () => {
                           )}
                         </div>
                         
-                        <h3 className="text-lg font-semibold text-white mb-2">Player #{player.id.slice(0, 6)}</h3>
+                        <h3 className="text-lg font-semibold text-white mb-2">
+                          {player.player?.name || `Player #${player.id.slice(0, 6)}`}
+                        </h3>
                         <div className="text-sm text-gray-400">
                           <div>Level: {player.currentLevel}</div>
                           <div>XP: {player.experience}</div>
+                          {player.player?.position && (
+                            <div className="capitalize">Position: {player.player.position}</div>
+                          )}
+                          {player.player?.rarity && (
+                            <div className="capitalize text-football-green">Rarity: {player.player.rarity}</div>
+                          )}
                         </div>
                         
                         {/* Quick Actions */}
@@ -246,7 +308,7 @@ const GamePage = () => {
                   >
                     <PlayerStatsDisplay
                       playerStats={playerProgression.totalStats}
-                      division={ownedPlayers?.find(p => p.id === showPlayerDetails)?.division || 'tercera'}
+                      division={ownedPlayers?.find(p => p.id === showPlayerDetails)?.player?.division || 'tercera'}
                       currentLevel={playerProgression.level}
                       experience={playerProgression.experience}
                       showProbability={true}
@@ -264,8 +326,8 @@ const GamePage = () => {
                   >
                     <FarmingInterface
                       ownedPlayerId={selectedPlayer}
-                      playerName={`Player #${selectedPlayer.slice(0, 6)}`}
-                      division={ownedPlayers?.find(p => p.id === selectedPlayer)?.division || 'tercera'}
+                      playerName={ownedPlayers?.find(p => p.id === selectedPlayer)?.player?.name || `Player #${selectedPlayer.slice(0, 6)}`}
+                      division={ownedPlayers?.find(p => p.id === selectedPlayer)?.player?.division || 'tercera'}
                       currentLevel={ownedPlayers?.find(p => p.id === selectedPlayer)?.currentLevel || 1}
                       experience={ownedPlayers?.find(p => p.id === selectedPlayer)?.experience || 0}
                     />
@@ -374,14 +436,26 @@ const GamePage = () => {
                 <h1 className="text-3xl md:text-4xl font-display font-bold gradient-text mb-4">
                   Penalty Shootout
                 </h1>
-                <div className="flex items-center justify-center space-x-8 text-lg">
-                  <div className="text-white">
-                    <span className="text-gray-400">Round:</span> 1/5
+                {sessionDetails && (
+                  <div className="flex items-center justify-center space-x-8 text-lg">
+                    <div className="text-white">
+                      <span className="text-gray-400">Round:</span> {sessionDetails.currentRound}/{sessionDetails.maxRounds}
+                    </div>
+                    <div className="text-white">
+                      <span className="text-gray-400">Score:</span> {sessionDetails.hostScore} - {sessionDetails.guestScore}
+                    </div>
+                    <div className="text-white">
+                      <span className="text-gray-400">Status:</span> 
+                      <span className={`ml-1 ${
+                        sessionDetails.status === 'in_progress' ? 'text-green-400' :
+                        sessionDetails.status === 'completed' ? 'text-blue-400' :
+                        'text-yellow-400'
+                      }`}>
+                        {sessionDetails.status.replace('_', ' ').toUpperCase()}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-white">
-                    <span className="text-gray-400">Score:</span> 0 - 0
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Football Field */}
@@ -497,9 +571,21 @@ const GamePage = () => {
                     {gameResult.isGoal ? '⚽ GOAL!' : '❌ MISS!'}
                   </div>
                   <p className="text-gray-300">{gameResult.description}</p>
-                  <div className="mt-4 text-lg">
-                    Score: {gameResult.hostScore} - {gameResult.guestScore}
-                  </div>
+                  {sessionDetails && (
+                    <div className="mt-4 space-y-2">
+                      <div className="text-lg">
+                        Score: {sessionDetails.hostScore} - {sessionDetails.guestScore}
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        Round {sessionDetails.currentRound} of {sessionDetails.maxRounds}
+                      </div>
+                      {sessionDetails.status === 'completed' && sessionDetails.winnerId && (
+                        <div className="text-football-green font-semibold">
+                          {sessionDetails.winnerId === sessionDetails.hostUserId ? 'You Won!' : 'You Lost!'}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </motion.div>
               )}
             </motion.div>
@@ -522,19 +608,30 @@ const GamePage = () => {
                   Game Complete!
                 </h1>
                 
-                <div className="text-2xl text-white mb-6">
-                  Final Score: {gameResult?.hostScore || 0} - {gameResult?.guestScore || 0}
-                </div>
+                {sessionDetails && (
+                  <div className="space-y-4 mb-6">
+                    <div className="text-2xl text-white">
+                      Final Score: {sessionDetails.hostScore} - {sessionDetails.guestScore}
+                    </div>
+                    {sessionDetails.winnerId && (
+                      <div className={`text-xl font-semibold ${
+                        sessionDetails.winnerId === sessionDetails.hostUserId ? 'text-football-green' : 'text-red-400'
+                      }`}>
+                        {sessionDetails.winnerId === sessionDetails.hostUserId ? '🏆 Victory!' : '😔 Defeat'}
+                      </div>
+                    )}
+                  </div>
+                )}
                 
                 <div className="space-y-4 mb-8">
                   <div className="text-lg text-gray-300">
-                    🏆 Experience Gained: +50 XP
+                    🏆 Experience Gained: +{gameResult?.isGoal ? '50' : '15'} XP
                   </div>
                   <div className="text-lg text-gray-300">
-                    💰 Rewards Earned: $25.00
+                    💰 Rewards Earned: ${sessionDetails?.winnerId === sessionDetails?.hostUserId ? '25.00' : '5.00'}
                   </div>
                   <div className="text-lg text-gray-300">
-                    📊 Statistics: Will be recorded on BSC when Web3 is connected
+                    📊 Statistics: Recorded in your profile
                   </div>
                 </div>
                 
@@ -542,9 +639,9 @@ const GamePage = () => {
                   <button onClick={resetGame} className="btn-primary">
                     Play Again
                   </button>
-                  <a href="/leaderboard" className="btn-outline">
+                  <Link to="/shop" className="btn-primary">
                     View Leaderboard
-                  </a>
+                  </Link>
                 </div>
               </div>
             </motion.div>

@@ -1,13 +1,74 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Trophy, TrendingUp, Users, Target, Star, Medal, Crown } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import ApiService from '../services/api';
 import LeaderboardTable from '../components/leaderboard/LeaderboardTable';
 import LiveStatistics from '../components/stats/LiveStatistics';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import { useAuthStatus } from '../hooks/useAuthStatus';
 
 const LeaderboardPage = () => {
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('weekly');
   const [category, setCategory] = useState<'overall' | 'wins' | 'winrate' | 'earnings'>('overall');
+  const isAuthenticated = useAuthStatus();
+
+  // Fetch real leaderboard data from API
+  const { data: leaderboardData, isLoading: leaderboardLoading, error: leaderboardError } = useQuery({
+    queryKey: ['leaderboard-data', timeframe, category],
+    queryFn: async () => {
+      console.log('🏆 Fetching leaderboard from production API...');
+      try {
+        const result = await ApiService.getLeaderboard();
+        console.log('✅ Leaderboard loaded from production API:', result?.length || 0, 'players');
+        return result;
+      } catch (error) {
+        console.warn('⚠️ Production API leaderboard failed, using fallback data:', error);
+        throw error;
+      }
+    },
+    retry: 2,
+    retryDelay: 1000,
+    refetchInterval: 30000, // Refresh every 30 seconds
+    staleTime: 10000, // Consider data stale after 10 seconds
+  });
+
+  // Fetch global statistics from API
+  const { data: globalStats, isLoading: statsLoading, error: statsError } = useQuery({
+    queryKey: ['global-statistics'],
+    queryFn: async () => {
+      console.log('📊 Fetching global stats from production API...');
+      try {
+        const result = await ApiService.getGlobalStatistics();
+        console.log('✅ Global stats loaded from production API:', result);
+        return result;
+      } catch (error) {
+        console.warn('⚠️ Production API global stats failed:', error);
+        throw error;
+      }
+    },
+    retry: 2,
+    retryDelay: 1000,
+    refetchInterval: 60000, // Refresh every minute
+  });
+
+  // Fetch system health for live status
+  const { data: systemHealth } = useQuery({
+    queryKey: ['system-health'],
+    queryFn: async () => {
+      console.log('🏥 Fetching system health from production API...');
+      try {
+        const result = await ApiService.getSystemHealth();
+        console.log('✅ System health loaded from production API:', result);
+        return result;
+      } catch (error) {
+        console.warn('⚠️ Production API system health failed:', error);
+        return null;
+      }
+    },
+    retry: 1,
+    refetchInterval: 30000,
+  });
 
   const timeframes = [
     { value: 'daily', label: 'Daily' },
@@ -75,7 +136,66 @@ const LeaderboardPage = () => {
           transition={{ delay: 0.1 }}
           className="mb-8"
         >
-          <LiveStatistics showUserStats={false} />
+          {/* Global Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="glass-dark rounded-xl p-4 text-center">
+              <div className="w-12 h-12 bg-gradient-to-r from-football-green to-football-blue rounded-full flex items-center justify-center mx-auto mb-3">
+                <Users className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-2xl font-bold text-white mb-1">
+                {statsLoading ? '...' : formatNumber(globalStats?.totalUsers || 0)}
+              </div>
+              <div className="text-sm text-gray-400">Total Players</div>
+              {statsError && <div className="text-xs text-red-400 mt-1">API Error</div>}
+            </div>
+            
+            <div className="glass-dark rounded-xl p-4 text-center">
+              <div className="w-12 h-12 bg-gradient-to-r from-football-blue to-football-purple rounded-full flex items-center justify-center mx-auto mb-3">
+                <Target className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-2xl font-bold text-white mb-1">
+                {statsLoading ? '...' : formatNumber(globalStats?.totalGames || 0)}
+              </div>
+              <div className="text-sm text-gray-400">Games Played</div>
+            </div>
+            
+            <div className="glass-dark rounded-xl p-4 text-center">
+              <div className="w-12 h-12 bg-gradient-to-r from-football-purple to-football-orange rounded-full flex items-center justify-center mx-auto mb-3">
+                <Star className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-2xl font-bold text-white mb-1">
+                {statsLoading ? '...' : `$${globalStats?.totalRewards || '0'}`}
+              </div>
+              <div className="text-sm text-gray-400">Total Rewards</div>
+            </div>
+            
+            <div className="glass-dark rounded-xl p-4 text-center">
+              <div className="w-12 h-12 bg-gradient-to-r from-football-orange to-football-green rounded-full flex items-center justify-center mx-auto mb-3">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
+              <div className="text-2xl font-bold text-white mb-1">
+                {statsLoading ? '...' : formatNumber(globalStats?.activeUsers || 0)}
+              </div>
+              <div className="text-sm text-gray-400">Active Users</div>
+            </div>
+          </div>
+          
+          {/* System Status */}
+          {systemHealth && (
+            <div className="glass-dark rounded-xl p-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse" />
+                  <span className="text-white font-semibold">System Status: {systemHealth.status}</span>
+                </div>
+                <div className="text-sm text-gray-400">
+                  Uptime: {Math.floor((systemHealth.uptime || 0) / 3600)}h • 
+                  Memory: {systemHealth.memory?.rss || 'N/A'} • 
+                  Environment: {systemHealth.environment || 'unknown'}
+                </div>
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Filters */}

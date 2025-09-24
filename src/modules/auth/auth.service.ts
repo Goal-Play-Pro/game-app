@@ -203,4 +203,93 @@ export class AuthService {
       default: return 'ethereum';
     }
   }
+
+  async getUserProfile(userId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Parse metadata if it's a string (SQLite compatibility)
+    const metadata = typeof user.metadata === 'string' 
+      ? JSON.parse(user.metadata) 
+      : user.metadata || {};
+
+    return {
+      id: user.id,
+      walletAddress: user.walletAddress,
+      displayName: metadata.displayName || `Player${user.id.slice(0, 6)}`,
+      bio: metadata.bio || 'Football gaming enthusiast',
+      avatar: metadata.avatar || 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=300',
+      preferences: metadata.preferences || {
+        notifications: {
+          gameResults: true,
+          newPlayerPacks: true,
+          tournamentInvitations: false
+        },
+        language: 'en'
+      },
+      isActive: user.isActive,
+      lastLogin: user.lastLogin,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    };
+  }
+
+  async updateUserProfile(userId: string, profileData: any) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Parse existing metadata
+    const existingMetadata = typeof user.metadata === 'string' 
+      ? JSON.parse(user.metadata) 
+      : user.metadata || {};
+
+    // Merge new profile data with existing metadata
+    const updatedMetadata = {
+      ...existingMetadata,
+      displayName: profileData.displayName || existingMetadata.displayName,
+      bio: profileData.bio || existingMetadata.bio,
+      avatar: profileData.avatar || existingMetadata.avatar,
+      preferences: {
+        ...existingMetadata.preferences,
+        ...profileData.preferences
+      },
+      updatedAt: new Date().toISOString()
+    };
+
+    // Update user with new metadata
+    await this.userRepository.update(userId, {
+      metadata: JSON.stringify(updatedMetadata),
+      updatedAt: new Date()
+    });
+
+    console.log(`✅ Profile updated for user ${userId}:`, {
+      displayName: updatedMetadata.displayName,
+      bio: updatedMetadata.bio?.slice(0, 50) + '...',
+      avatar: updatedMetadata.avatar ? 'Updated' : 'No change'
+    });
+
+    return {
+      success: true,
+      message: 'Profile updated successfully',
+      data: {
+        id: user.id,
+        walletAddress: user.walletAddress,
+        displayName: updatedMetadata.displayName,
+        bio: updatedMetadata.bio,
+        avatar: updatedMetadata.avatar,
+        preferences: updatedMetadata.preferences,
+        updatedAt: new Date()
+      }
+    };
+  }
 }

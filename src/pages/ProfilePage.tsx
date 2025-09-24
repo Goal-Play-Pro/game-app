@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   User, 
@@ -12,38 +12,108 @@ import {
   Target,
   Star,
   TrendingUp,
-  Calendar
+  Calendar,
+  Gift,
+  Link as LinkIcon
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ApiService from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ReferralDashboard from '../components/referral/ReferralDashboard';
 import WalletManager from '../components/wallet/WalletManager';
+import EditProfileModal from '../components/profile/EditProfileModal';
 import { CompleteUserProfile } from '../services/api';
 import { useAuthStatus } from '../hooks/useAuthStatus';
 
+import { shareContent, showCopyNotification } from '../utils/share.utils';
+
 const ProfilePage = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'referrals' | 'wallets' | 'history' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'referrals' | 'wallets' | 'history' | 'settings'>(() => {
+    // Check URL params for tab
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    return (tabParam as any) || 'overview';
+  });
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const isAuthenticated = useAuthStatus();
+  const queryClient = useQueryClient();
+
+  // Get real user wallet address
+  const connectedWalletAddress = localStorage.getItem('walletAddress');
+  const isWalletConnected = localStorage.getItem('walletConnected') === 'true';
 
   // Mock user data - in real app this would come from auth context
-  const currentUser = {
+  const [currentUser, setCurrentUser] = useState({
     id: '1',
     username: 'golplayer',
     displayName: 'Gol Player',
     avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=300',
     banner: 'https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg?auto=compress&cs=tinysrgb&w=1200',
     bio: 'Passionate football gamer and NFT collector. Master of penalty shootouts.',
-    walletAddress: '0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000',
+    walletAddress: connectedWalletAddress || '0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000',
     isVerified: true,
     joinedAt: '2024-01-15',
     level: 25,
     experience: 15420,
     nextLevelXP: 20000,
-  };
+  });
+
+  // State for profile updates
+  const [profileData, setProfileData] = useState({
+    displayName: currentUser.displayName,
+    bio: currentUser.bio,
+    avatar: currentUser.avatar,
+  });
 
   // Fetch comprehensive user data
-  const { data: completeProfile, isLoading: profileLoading } = useQuery<CompleteUserProfile>({
+  const { data: userProfile, isLoading: profileLoading } = useQuery({
+    queryKey: ['user-profile'],
+    queryFn: () => {
+      console.log('👤 Loading user profile from production API...');
+      return ApiService.getUserProfile();
+    },
+    enabled: isWalletConnected && !!connectedWalletAddress,
+    retry: 2,
+    retryDelay: 1000,
+  });
+
+  // Fetch referral code
+  const { data: referralCode, isLoading: referralCodeLoading } = useQuery({
+    queryKey: ['my-referral-code'],
+    queryFn: () => ApiService.getMyReferralCode(),
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  // Fetch referral stats
+  const { data: referralStats, isLoading: referralStatsLoading } = useQuery({
+    queryKey: ['referral-stats'],
+    queryFn: () => ApiService.getReferralStats(),
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  // Update profile data when user profile loads
+  useEffect(() => {
+    if (userProfile) {
+      console.log('📝 Updating profile data from production API:', userProfile);
+      setProfileData({
+        displayName: userProfile.displayName || currentUser.displayName,
+        bio: userProfile.bio || currentUser.bio,
+        avatar: userProfile.avatar || currentUser.avatar,
+      });
+      
+      // Update current user with real data
+      setCurrentUser(prev => ({
+        ...prev,
+        displayName: userProfile.displayName || prev.displayName,
+        bio: userProfile.bio || prev.bio,
+        avatar: userProfile.avatar || prev.avatar,
+      }));
+    }
+  }, [userProfile]);
+
+  const { data: completeProfile, isLoading: completeProfileLoading } = useQuery<CompleteUserProfile>({
     queryKey: ['complete-user-profile'],
     queryFn: () => ApiService.getCompleteUserProfile(),
     enabled: isAuthenticated,
@@ -80,10 +150,49 @@ const ProfilePage = () => {
     queryFn: ApiService.getAllUserWallets,
     enabled: isAuthenticated,
   });
+
+  // Create referral code mutation
+  const createReferralCodeMutation = useMutation({
+    mutationFn: async (customCode?: string) => {
+      console.log('🚀 Creating referral code via production API for wallet:', connectedWalletAddress);
+      
+      if (!connectedWalletAddress) {
+        throw new Error('No wallet connected. Please connect your wallet first.');
+      }
+      
+      // Generate code based on wallet address
+      const walletBasedCode = customCode || (connectedWalletAddress.slice(2, 8).toUpperCase() + 
+        Math.random().toString(36).substring(2, 5).toUpperCase());
+      
+      return await ApiService.createReferralCode(walletBasedCode);
+    },
+    onSuccess: (data) => {
+      console.log('✅ Referral code created successfully via production API:', data);
+      queryClient.invalidateQueries({ queryKey: ['my-referral-code'] });
+      queryClient.invalidateQueries({ queryKey: ['referral-stats'] });
+      alert(`✅ ¡Código creado exitosamente!\n\nWallet: ${connectedWalletAddress?.slice(0, 6)}...${connectedWalletAddress?.slice(-4)}\nTu código: ${data.code}\nTu link: https://goalplay.pro?ref=${data.code}\n\n¡Compártelo y gana 5% de cada compra!`);
+    },
+    onError: (error) => {
+      console.error('❌ Error creating referral code via production API:', error);
+      alert(`❌ Error creando código de referido: ${error.message}\n\nAsegúrate de que tu wallet esté conectada.`);
+    },
+  });
+
+  const handleCreateReferralCode = () => {
+    console.log('🎯 User clicked create referral code button for wallet:', connectedWalletAddress);
+    
+    if (!isWalletConnected || !connectedWalletAddress) {
+      alert('❌ Por favor conecta tu wallet primero para crear tu código de referido.');
+      return;
+    }
+    
+    createReferralCodeMutation.mutate();
+  };
+
   const tabs = [
     { id: 'overview', label: 'Overview', icon: User },
     { id: 'stats', label: 'Statistics', icon: TrendingUp },
-    { id: 'referrals', label: 'Referrals', icon: Users },
+    { id: 'referrals', label: 'Referrals (5%)', icon: Users },
     { id: 'wallets', label: 'Wallets', icon: Wallet },
     { id: 'history', label: 'History', icon: Calendar },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -105,15 +214,35 @@ const ProfilePage = () => {
   };
 
   const shareProfile = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: `${currentUser.displayName} - Gol Play Profile`,
-        text: currentUser.bio,
-        url: window.location.href
-      });
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-    }
+    // Usar utilidad robusta de compartir
+    shareContent({
+      title: `${currentUser.displayName} - Gol Play Profile`,
+      text: currentUser.bio,
+      url: window.location.href
+    }, {
+      showNotification: true,
+      notificationDuration: 3000,
+      fallbackToPrompt: true
+    }).then((result) => {
+      if (result.success) {
+        console.log(`✅ Profile shared via ${result.method}`);
+      } else {
+        console.log('❌ Failed to share profile');
+      }
+    });
+  };
+
+  const copyToClipboard = () => {
+    // Usar utilidad robusta de copia
+    shareContent({
+      title: `${currentUser.displayName} - Gol Play Profile`,
+      text: currentUser.bio,
+      url: window.location.href
+    }, {
+      showNotification: true,
+      notificationDuration: 3000,
+      fallbackToPrompt: true
+    });
   };
 
   // Calculate stats
@@ -123,15 +252,23 @@ const ProfilePage = () => {
   const winRate = completedGames > 0 ? ((completedGames * 0.7) * 100).toFixed(1) : '0'; // Mock win rate
   const totalSpent = completeProfile?.totalSpent || userOrders?.reduce((sum, order) => sum + parseFloat(order.totalPriceUSDT), 0) || 0;
 
-  if (!isAuthenticated) {
+  if (!isWalletConnected || !connectedWalletAddress) {
     return (
       <div className="pt-24 pb-20 flex justify-center items-center min-h-screen">
         <div className="glass-dark rounded-xl p-10 text-center space-y-4 max-w-md">
           <Users className="w-12 h-12 text-gray-500 mx-auto" />
-          <h2 className="text-2xl font-display text-white">Connect your wallet</h2>
+          <h2 className="text-2xl font-display text-white">Conecta tu Wallet</h2>
           <p className="text-gray-400">
-            Sign in with your wallet to view your profile, orders, and referral statistics.
+            Conecta tu wallet para ver tu perfil, órdenes y crear tu código de referido.
           </p>
+          <div className="mt-4 p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg">
+            <p className="text-blue-400 text-sm">
+              🔍 Debug: Wallet conectada = {isWalletConnected ? 'true' : 'false'}
+            </p>
+            <p className="text-blue-400 text-xs mt-1">
+              Dirección: {connectedWalletAddress || 'No conectada'}
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -234,7 +371,10 @@ const ProfilePage = () => {
                     <span>Share</span>
                   </button>
                   
-                  <button className="btn-primary flex items-center space-x-2">
+                  <button 
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="btn-primary flex items-center space-x-2"
+                  >
                     <Settings className="w-4 h-4" />
                     <span>Edit Profile</span>
                   </button>
@@ -534,7 +674,203 @@ const ProfilePage = () => {
             )}
 
             {activeTab === 'referrals' && (
-              <ReferralDashboard />
+              <div className="space-y-6">
+                {/* Referral Code Status */}
+                {referralCodeLoading ? (
+                  <div className="glass-dark rounded-xl p-8 text-center">
+                    <LoadingSpinner size="lg" text="Loading referral data..." />
+                  </div>
+                ) : referralCode ? (
+                  /* User already has a referral code */
+                  <div className="space-y-6">
+                    {/* Referral Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="glass-dark rounded-xl p-4 text-center">
+                        <div className="text-2xl font-bold text-white mb-1">
+                          {referralStats?.totalReferrals || 0}
+                        </div>
+                        <div className="text-sm text-gray-400">Total Referrals</div>
+                      </div>
+                      <div className="glass-dark rounded-xl p-4 text-center">
+                        <div className="text-2xl font-bold text-white mb-1">
+                          {referralStats?.activeReferrals || 0}
+                        </div>
+                        <div className="text-sm text-gray-400">Active</div>
+                      </div>
+                      <div className="glass-dark rounded-xl p-4 text-center">
+                        <div className="text-2xl font-bold text-football-green mb-1">
+                          ${referralStats?.totalCommissions || '0.00'}
+                        </div>
+                        <div className="text-sm text-gray-400">Total Earned</div>
+                      </div>
+                      <div className="glass-dark rounded-xl p-4 text-center">
+                        <div className="text-2xl font-bold text-football-blue mb-1">
+                          ${referralStats?.thisMonthCommissions || '0.00'}
+                        </div>
+                        <div className="text-sm text-gray-400">This Month</div>
+                      </div>
+                    </div>
+
+                    {/* Referral Link */}
+                    <div className="glass-dark rounded-xl p-6">
+                      <h4 className="text-lg font-semibold text-white mb-4">Your Referral Link</h4>
+                      
+                      <div className="mb-4">
+                        <div className="text-sm text-gray-400 mb-2">Your Code</div>
+                        <div className="flex items-center space-x-3">
+                          <div className="flex-1 glass rounded-lg p-3">
+                            <div className="text-white font-mono text-xl text-center">
+                              {referralCode.code}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(referralCode.code)}
+                            className="btn-secondary"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mb-4">
+                        <div className="text-sm text-gray-400 mb-2">Full Link</div>
+                        <div className="flex items-center space-x-2">
+                          <div className="flex-1 glass rounded-lg p-3">
+                            <div className="text-white font-mono text-sm break-all">
+                              {referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`)}
+                            className="btn-secondary"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <button
+                          onClick={() => navigator.clipboard.writeText(referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`)}
+                          className="btn-secondary flex items-center justify-center space-x-2"
+                        >
+                          <Copy className="w-4 h-4" />
+                          <span>Copy</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (navigator.share) {
+                              navigator.share({
+                                title: 'Join Gol Play!',
+                                text: '🚀 Join me on Gol Play and earn rewards playing football! ⚽💰',
+                                url: referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`
+                              });
+                            }
+                          }}
+                          className="btn-secondary flex items-center justify-center space-x-2"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          <span>Share</span>
+                        </button>
+                        <button
+                          onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent('🚀 Join me on Gol Play - The ultimate football gaming platform! ⚽💰')}&url=${encodeURIComponent(referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`)}`, '_blank')}
+                          className="btn-secondary flex items-center justify-center space-x-2"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          <span>Tweet</span>
+                        </button>
+                        <button
+                          onClick={() => window.open(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`)}`, '_blank')}
+                          className="btn-secondary flex items-center justify-center space-x-2"
+                        >
+                          <span>QR</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* User doesn't have a referral code yet */
+                  <div className="glass-dark rounded-xl p-8 text-center">
+                    <div className="w-16 h-16 bg-gradient-to-r from-football-green to-football-blue rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Gift className="w-8 h-8 text-white" />
+                    </div>
+                    
+                    <h3 className="text-2xl font-bold text-white mb-4">
+                      🎉 Sistema de Referidos - Gana 5%
+                    </h3>
+                    <div className="mb-4 p-3 glass rounded-lg">
+                      <p className="text-football-green text-sm">
+                        📍 Tu Wallet: {connectedWalletAddress?.slice(0, 6)}...{connectedWalletAddress?.slice(-4)}
+                      </p>
+                    </div>
+                    <p className="text-gray-400 mb-6 max-w-md mx-auto">
+                      Crea tu código de referido único y gana 5% de comisión de TODAS las compras que hagan tus amigos ¡PARA SIEMPRE!
+                    </p>
+                    
+                    <button
+                      onClick={handleCreateReferralCode}
+                      disabled={createReferralCodeMutation.isPending}
+                      className="btn-primary flex items-center space-x-2 mx-auto text-lg px-8 py-4 disabled:opacity-50"
+                    >
+                      {createReferralCodeMutation.isPending ? (
+                        <LoadingSpinner size="sm" color="white" />
+                      ) : (
+                        <>
+                          <LinkIcon className="w-6 h-6" />
+                          <span>🎯 CREAR MI CÓDIGO DE REFERIDO</span>
+                        </>
+                      )}
+                    </button>
+                    
+                    <div className="mt-6 p-4 glass rounded-lg max-w-md mx-auto">
+                      <h4 className="text-football-green font-semibold mb-2">💡 ¿Cómo funciona?</h4>
+                      <ul className="text-sm text-gray-400 space-y-1 text-left">
+                        <li>• Creas tu código único</li>
+                        <li>• Compartes tu link especial</li>
+                        <li>• Tus amigos se registran con tu código</li>
+                        <li>• ¡Ganas 5% de TODAS sus compras!</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Instructions */}
+                <div className="glass-dark rounded-xl p-6">
+                  <h4 className="text-lg font-semibold text-white mb-4">📈 Maximiza tus Ganancias</h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="text-center">
+                      <div className="w-12 h-12 bg-gradient-to-r from-football-green to-football-blue rounded-full flex items-center justify-center mx-auto mb-3">
+                        <span className="text-white font-bold">1</span>
+                      </div>
+                      <h5 className="font-semibold text-white mb-2">Comparte en Redes</h5>
+                      <p className="text-gray-400 text-sm">
+                        Twitter, Instagram, TikTok, YouTube
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <div className="w-12 h-12 bg-gradient-to-r from-football-blue to-football-purple rounded-full flex items-center justify-center mx-auto mb-3">
+                        <span className="text-white font-bold">2</span>
+                      </div>
+                      <h5 className="font-semibold text-white mb-2">Invita Amigos</h5>
+                      <p className="text-gray-400 text-sm">
+                        Gamers y fanáticos del fútbol
+                      </p>
+                    </div>
+                    
+                    <div className="text-center">
+                      <div className="w-12 h-12 bg-gradient-to-r from-football-purple to-football-orange rounded-full flex items-center justify-center mx-auto mb-3">
+                        <span className="text-white font-bold">3</span>
+                      </div>
+                      <h5 className="font-semibold text-white mb-2">Gana Comisiones</h5>
+                      <p className="text-gray-400 text-sm">
+                        5% automático de cada compra
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
             {activeTab === 'wallets' && (
@@ -643,6 +979,42 @@ const ProfilePage = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        currentProfile={{
+          displayName: profileData.displayName,
+          bio: profileData.bio,
+          avatar: profileData.avatar,
+          preferences: {
+            notifications: {
+              gameResults: true,
+              newPlayerPacks: true,
+              tournamentInvitations: false,
+            },
+            language: 'en',
+          },
+        }}
+        onProfileUpdate={(updatedData) => {
+          // Actualizar el estado del usuario actual
+          setCurrentUser(prev => ({
+            ...prev,
+            displayName: updatedData.displayName || prev.displayName,
+            bio: updatedData.bio || prev.bio,
+            avatar: updatedData.avatar || prev.avatar,
+          }));
+          
+          // Actualizar profileData también
+          setProfileData(prev => ({
+            ...prev,
+            displayName: updatedData.displayName || prev.displayName,
+            bio: updatedData.bio || prev.bio,
+            avatar: updatedData.avatar || prev.avatar,
+          }));
+        }}
+      />
     </div>
   );
 };

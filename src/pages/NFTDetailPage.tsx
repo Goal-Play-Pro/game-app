@@ -17,6 +17,8 @@ import { useQuery } from '@tanstack/react-query';
 import ApiService from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
+import { shareContent } from '../utils/share.utils';
+
 const NFTDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<'details' | 'activity' | 'offers'>('details');
@@ -82,15 +84,19 @@ const NFTDetailPage = () => {
   };
 
   const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: nft.name,
-        text: nft.description,
-        url: window.location.href
-      });
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-    }
+    // Usar utilidad robusta de compartir
+    shareContent({
+      title: nft.name,
+      text: nft.description,
+      url: window.location.href
+    }, {
+      showNotification: true,
+      fallbackToPrompt: true
+    }).then((result) => {
+      if (result.success) {
+        console.log(`✅ NFT detail shared via ${result.method}`);
+      }
+    });
   };
 
   const handleBuy = async () => {
@@ -171,277 +177,5 @@ const NFTDetailPage = () => {
                   <Heart className="w-5 h-5 text-red-400" />
                 </div>
                 <div className="text-lg font-semibold text-white">{nft.likes}</div>
-                <div className="text-sm text-gray-400">Likes</div>
-              </div>
-              
-              <div className="glass rounded-xl p-4 text-center">
-                <div className="flex items-center justify-center mb-2">
-                  <Eye className="w-5 h-5 text-blue-400" />
-                </div>
-                <div className="text-lg font-semibold text-white">{nft.views}</div>
-                <div className="text-sm text-gray-400">Views</div>
-              </div>
-              
-              <div className="glass rounded-xl p-4 text-center">
-                <div className="flex items-center justify-center mb-2">
-                  <TrendingUp className="w-5 h-5 text-green-400" />
-                </div>
-                <div className="text-lg font-semibold text-white">#{Math.floor(Math.random() * 100) + 1}</div>
-                <div className="text-sm text-gray-400">Rank</div>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Right Column - Details */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-6"
-          >
-            {/* Collection Info */}
-            <div className="flex items-center space-x-3">
-              <img
-                src={nft.collection.image}
-                alt={nft.collection.name}
-                className="w-8 h-8 rounded-full"
-              />
-              <Link
-                to={`/collection/${nft.collection.id}`}
-                className="text-neon-blue hover:text-neon-purple transition-colors font-medium"
-              >
-                {nft.collection.name}
-              </Link>
-              {nft.collection.isVerified && (
-                <div className="w-5 h-5 bg-neon-blue rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">✓</span>
-                </div>
-              )}
-            </div>
-
-            {/* Title */}
-            <h1 className="text-3xl md:text-4xl font-display font-bold text-white">
-              {nft.name}
-            </h1>
-
-            {/* Creator & Owner */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-sm text-gray-400 mb-2">Created by</div>
-                <div className="flex items-center space-x-2">
-                  <img
-                    src={nft.creator.avatar}
-                    alt={nft.creator.displayName}
-                    className="w-8 h-8 rounded-full"
-                  />
-                  <Link
-                    to={`/profile/${nft.creator.id}`}
-                    className="text-white hover:text-neon-blue transition-colors font-medium"
-                  >
-                    {nft.creator.displayName}
-                  </Link>
-                  {nft.creator.isVerified && (
-                    <div className="w-4 h-4 bg-neon-blue rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">✓</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div>
-                <div className="text-sm text-gray-400 mb-2">Owned by</div>
-                <div className="flex items-center space-x-2">
-                  <img
-                    src={nft.owner.avatar}
-                    alt={nft.owner.displayName}
-                    className="w-8 h-8 rounded-full"
-                  />
-                  <Link
-                    to={`/profile/${nft.owner.id}`}
-                    className="text-white hover:text-neon-blue transition-colors font-medium"
-                  >
-                    {nft.owner.displayName}
-                  </Link>
-                  {nft.owner.isVerified && (
-                    <div className="w-4 h-4 bg-neon-blue rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">✓</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Description */}
-            <div className="glass rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-3">Description</h3>
-              <p className={`text-gray-300 leading-relaxed ${!showFullDescription && nft.description.length > 200 ? 'line-clamp-3' : ''}`}>
-                {nft.description}
-              </p>
-              {nft.description.length > 200 && (
-                <button
-                  onClick={() => setShowFullDescription(!showFullDescription)}
-                  className="text-neon-blue hover:text-neon-purple transition-colors text-sm mt-2"
-                >
-                  {showFullDescription ? 'Show less' : 'Show more'}
-                </button>
-              )}
-            </div>
-
-            {/* Price & Actions */}
-            {nft.isForSale && (
-              <div className="glass rounded-xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <div className="text-sm text-gray-400 mb-1">Current Price</div>
-                    <div className="text-3xl font-bold text-white">
-                      {nft.price} {nft.currency}
-                    </div>
-                    <div className="text-sm text-gray-400">
-                      ≈ ${(nft.price * 2000).toLocaleString()} USD
-                    </div>
-                  </div>
-                  
-                  <div className="text-right">
-                    <div className="text-sm text-gray-400 mb-1">Ends in</div>
-                    <div className="text-lg font-semibold text-white">
-                      2d 14h 32m
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex space-x-3">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleBuy}
-                    className="flex-1 btn-primary flex items-center justify-center space-x-2"
-                  >
-                    <ShoppingCart className="w-5 h-5" />
-                    <span>Buy Now</span>
-                  </motion.button>
-                  
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="flex-1 btn-outline flex items-center justify-center space-x-2"
-                  >
-                    <Zap className="w-5 h-5" />
-                    <span>Make Offer</span>
-                  </motion.button>
-                </div>
-              </div>
-            )}
-
-            {/* Tabs */}
-            <div className="glass rounded-xl overflow-hidden">
-              {/* Tab Headers */}
-              <div className="flex border-b border-white/10">
-                {[
-                  { id: 'details', label: 'Details' },
-                  { id: 'activity', label: 'Activity' },
-                  { id: 'offers', label: 'Offers' }
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
-                      activeTab === tab.id
-                        ? 'text-neon-blue border-b-2 border-neon-blue'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Tab Content */}
-              <div className="p-6">
-                {activeTab === 'details' && (
-                  <div className="space-y-6">
-                    {/* Attributes */}
-                    {nft.attributes.length > 0 && (
-                      <div>
-                        <h4 className="text-lg font-semibold text-white mb-4">Attributes</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                          {nft.attributes.map((attr, index) => (
-                            <div key={index} className="glass rounded-lg p-3 text-center">
-                              <div className="text-sm text-gray-400 mb-1">
-                                {attr.trait_type}
-                              </div>
-                              <div className="font-semibold text-white">
-                                {attr.value}
-                              </div>
-                              {attr.rarity && (
-                                <div className="text-xs text-neon-blue mt-1">
-                                  {attr.rarity}% rare
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Blockchain Info */}
-                    <div>
-                      <h4 className="text-lg font-semibold text-white mb-4">Blockchain Info</h4>
-                      <div className="space-y-3">
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Blockchain</span>
-                          <span className="text-white">{nft.blockchain}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Token Standard</span>
-                          <span className="text-white">ERC-721</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Contract Address</span>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-white">0x742d...Be000</span>
-                            <button className="text-gray-400 hover:text-white transition-colors">
-                              <ExternalLink className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-400">Token ID</span>
-                          <span className="text-white">{nft.id}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'activity' && (
-                  <div className="text-center py-8">
-                    <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h4 className="text-lg font-semibold text-white mb-2">
-                      No Activity Yet
-                    </h4>
-                    <p className="text-gray-400">
-                      Activity will appear here once there are sales, transfers, or other events.
-                    </p>
-                  </div>
-                )}
-
-                {activeTab === 'offers' && (
-                  <div className="text-center py-8">
-                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h4 className="text-lg font-semibold text-white mb-2">
-                      No Offers Yet
-                    </h4>
-                    <p className="text-gray-400">
-                      Be the first to make an offer on this NFT!
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default NFTDetailPage;
+  )
+}

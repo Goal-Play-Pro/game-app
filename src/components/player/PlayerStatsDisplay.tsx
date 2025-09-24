@@ -41,7 +41,7 @@ const PlayerStatsDisplay = ({
         const chance = await ApiService.calculatePenaltyChance(playerStats, division);
         setPenaltyChance(chance);
       } catch (error) {
-        console.warn('Could not calculate penalty chance');
+        console.warn('Production API penalty chance calculation not available, using fallback');
         // Fallback calculation
         const totalStats = playerStats.speed + playerStats.shooting + playerStats.passing + 
                           playerStats.defending + playerStats.goalkeeping;

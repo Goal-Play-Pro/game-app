@@ -17,6 +17,8 @@ import ApiService from '../services/api';
 import NFTGrid from '../components/nft/NFTGrid';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
+import { shareContent } from '../utils/share.utils';
+
 const CollectionDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -83,15 +85,19 @@ const CollectionDetailPage = () => {
   };
 
   const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: collection.name,
-        text: collection.description,
-        url: window.location.href
-      });
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-    }
+    // Usar utilidad robusta de compartir
+    shareContent({
+      title: collection.name,
+      text: collection.description,
+      url: window.location.href
+    }, {
+      showNotification: true,
+      fallbackToPrompt: true
+    }).then((result) => {
+      if (result.success) {
+        console.log(`✅ Collection shared via ${result.method}`);
+      }
+    });
   };
 
   return (
@@ -229,131 +235,6 @@ const CollectionDetailPage = () => {
               )}
             </div>
           )}
-        </motion.div>
-
-        {/* Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8"
-        >
-          <div className="glass rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-white mb-1">
-              {formatNumber(collection.totalSupply)}
-            </div>
-            <div className="text-sm text-gray-400">Items</div>
-          </div>
-          
-          <div className="glass rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-white mb-1">
-              {formatNumber(collection.ownersCount)}
-            </div>
-            <div className="text-sm text-gray-400">Owners</div>
-          </div>
-          
-          <div className="glass rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-white mb-1">
-              {collection.floorPrice} ETH
-            </div>
-            <div className="text-sm text-gray-400">Floor Price</div>
-          </div>
-          
-          <div className="glass rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-white mb-1">
-              {formatNumber(collection.totalVolume)} ETH
-            </div>
-            <div className="text-sm text-gray-400">Total Volume</div>
-          </div>
-          
-          <div className="glass rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-white mb-1">
-              {collection.royalty}%
-            </div>
-            <div className="text-sm text-gray-400">Royalty</div>
-          </div>
-        </motion.div>
-
-        {/* Filters and Controls */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="flex flex-col md:flex-row md:items-center md:justify-between mb-8"
-        >
-          <div className="flex items-center space-x-4 mb-4 md:mb-0">
-            <span className="text-gray-400 font-medium">
-              {nfts?.length || 0} items
-            </span>
-            
-            <div className="flex items-center space-x-2">
-              <span className="text-gray-400 text-sm">Sort by:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="glass rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-neon-blue"
-              >
-                <option value="created">Recently Created</option>
-                <option value="price">Price</option>
-                <option value="likes">Most Liked</option>
-                <option value="views">Most Viewed</option>
-              </select>
-              
-              <select
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value as any)}
-                className="glass rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-neon-blue"
-              >
-                <option value="desc">High to Low</option>
-                <option value="asc">Low to High</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-4">
-            {/* View Mode Toggle */}
-            <div className="flex items-center glass rounded-lg p-1">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-md transition-colors ${
-                  viewMode === 'grid' 
-                    ? 'bg-neon-blue text-white' 
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                <Grid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md transition-colors ${
-                  viewMode === 'list' 
-                    ? 'bg-neon-blue text-white' 
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
-            
-            <button className="btn-secondary flex items-center space-x-2">
-              <Filter className="w-4 h-4" />
-              <span>Filter</span>
-            </button>
-          </div>
-        </motion.div>
-
-        {/* NFTs Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <NFTGrid
-            nfts={nfts || []}
-            loading={nftsLoading}
-            showCollection={false}
-            columns={viewMode === 'grid' ? 4 : 2}
-          />
         </motion.div>
       </div>
     </div>

@@ -22,7 +22,12 @@ const AdminPage = () => {
   const { data: revenueReport, isLoading: revenueLoading, refetch: refetchRevenue } = useQuery({
     queryKey: ['revenue-report'],
     queryFn: async () => {
-      const response = await fetch('/api/blockchain/revenue-report?days=30');
+      const response = await fetch(`${API_CONFIG.BASE_URL}/blockchain/revenue-report?days=30`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+        },
+      });
       return response.json();
     },
     refetchInterval: 60000, // Refresh every minute
@@ -31,7 +36,12 @@ const AdminPage = () => {
   const { data: monitoringReport, isLoading: monitoringLoading, refetch: refetchMonitoring } = useQuery({
     queryKey: ['monitoring-report'],
     queryFn: async () => {
-      const response = await fetch('/api/blockchain/monitoring-report');
+      const response = await fetch(`${API_CONFIG.BASE_URL}/blockchain/monitoring-report`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+        },
+      });
       return response.json();
     },
     refetchInterval: 30000, // Refresh every 30 seconds
@@ -40,7 +50,12 @@ const AdminPage = () => {
   const { data: networkStats, isLoading: networkLoading } = useQuery({
     queryKey: ['network-stats'],
     queryFn: async () => {
-      const response = await fetch('/api/blockchain/network-stats');
+      const response = await fetch(`${API_CONFIG.BASE_URL}/blockchain/network-stats`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
+        },
+      });
       return response.json();
     },
     refetchInterval: 60000,

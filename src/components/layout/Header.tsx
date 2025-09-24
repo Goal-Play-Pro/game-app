@@ -218,12 +218,12 @@ const Header = () => {
               {/* Connection Status */}
               <div className="pt-3 border-t border-white/10">
                 <Link
-                  to="/tokenomics"
+                  to="/profile?tab=referrals"
                   onClick={() => setIsMenuOpen(false)}
                   className="flex items-center space-x-2 text-xs text-gray-400 hover:text-football-green transition-colors"
                 >
                   <div className="w-2 h-2 rounded-full bg-football-green" />
-                  <span>Add GOAL Token to MetaMask</span>
+                  <span>API: game.goalplay.pro • Create Referral Code (5%)</span>
                 </Link>
               </div>
             </div>

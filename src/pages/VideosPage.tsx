@@ -787,6 +787,10 @@ const VideosPage = () => {
               <ExternalLink className="w-5 h-5" />
               <span>Telegram</span>
             </a>
+            
+            <div className="text-xs text-gray-400 self-center">
+              API: game.goalplay.pro
+            </div>
           </div>
         </motion.div>
       </div>

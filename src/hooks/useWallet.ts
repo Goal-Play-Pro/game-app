@@ -138,6 +138,9 @@ export const useWallet = () => {
       localStorage.setItem('walletConnected', 'true');
       localStorage.setItem('walletAddress', accounts[0]);
       localStorage.setItem('walletChainId', finalChainIdNumber.toString());
+      
+      // También guardar como token de autenticación para compatibilidad
+      localStorage.setItem('authToken', `wallet:${accounts[0]}`);
 
       // Register pending referral if exists
       setTimeout(() => {
@@ -171,6 +174,9 @@ export const useWallet = () => {
     localStorage.removeItem('walletConnected');
     localStorage.removeItem('walletAddress');
     localStorage.removeItem('walletChainId');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('jwt_token');
+    localStorage.removeItem('accessToken');
     
     console.log('🔌 Wallet disconnected');
   };

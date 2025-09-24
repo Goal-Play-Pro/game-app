@@ -92,6 +92,8 @@ export const usePayment = () => {
       // Invalidar queries relacionadas
       queryClient.invalidateQueries({ queryKey: ['user-orders'] });
       queryClient.invalidateQueries({ queryKey: ['owned-players'] });
+      queryClient.invalidateQueries({ queryKey: ['market-data'] });
+      queryClient.invalidateQueries({ queryKey: ['global-statistics'] });
     },
     onError: (error: any) => {
       console.error('❌ Error en pago:', error);

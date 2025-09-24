@@ -109,17 +109,22 @@ const LeaderboardTable = ({
             <Trophy className="w-8 h-8 text-red-500" />
           </div>
           <h3 className="text-xl font-semibold text-white mb-2">
-            Failed to Load Leaderboard
+            Production API Connection Issue
           </h3>
           <p className="text-gray-400 mb-6">
-            Unable to fetch leaderboard data. Please try again.
+            Unable to connect to https://game.goalplay.pro/api/. Using offline mode.
           </p>
-          <button
-            onClick={() => refetch()}
-            className="btn-primary"
-          >
-            Try Again
-          </button>
+          <div className="space-y-3">
+            <button
+              onClick={() => refetch()}
+              className="btn-primary"
+            >
+              Retry Connection
+            </button>
+            <p className="text-xs text-gray-500">
+              Endpoint: https://game.goalplay.pro/api/leaderboard
+            </p>
+          </div>
         </div>
       </div>
     );

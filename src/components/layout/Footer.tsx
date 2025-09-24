@@ -238,7 +238,7 @@ const Footer = () => {
             >
               <Heart className="w-4 h-4 text-red-500 fill-current" />
             </motion.span>
-            <span>for football gaming enthusiasts</span>
+            <span>for football gaming enthusiasts • API: game.goalplay.pro</span>
           </p>
         </motion.div>
       </div>

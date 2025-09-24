@@ -2,6 +2,10 @@
 
 A comprehensive football gaming platform featuring wallet authentication, on-chain payments, gacha system, penalty shootout gameplay, and BNB Smart Chain integration.
 
+**🔗 Production API:** https://game.goalplay.pro/api/
+**📚 API Documentation:** https://game.goalplay.pro/api/docs
+**🏥 Health Check:** https://game.goalplay.pro/api/health
+
 ## Features
 
 - **Multi-Chain Wallet Authentication**: SIWE (EIP-4361) for Ethereum chains and Solana signature verification

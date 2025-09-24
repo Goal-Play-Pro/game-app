@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Copy, Share2, ExternalLink, QrCode } from 'lucide-react';
+import { shareContent, showCopyNotification } from '../../utils/share.utils';
 
 interface ReferralLinkProps {
   referralLink: string;
@@ -12,27 +13,45 @@ const ReferralLink = ({ referralLink, referralCode, className = '' }: ReferralLi
   const [copySuccess, setCopySuccess] = useState(false);
 
   const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(referralLink);
+    // Usar utilidad robusta de copia
+    const result = await shareContent({
+      title: 'Join Gol Play with my referral link!',
+      text: 'Start playing football games and earning rewards! 🚀⚽💰',
+      url: referralLink
+    }, {
+      showNotification: false, // Manejamos la notificación manualmente
+      fallbackToPrompt: false
+    });
+
+    if (result.success) {
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000);
-    } catch (error) {
-      console.error('Error copying to clipboard:', error);
+      
+      if (result.method === 'clipboard') {
+        showCopyNotification('✅ Referral link copied to clipboard!');
+      }
+    } else {
+      console.error('Failed to copy referral link');
+      // Mostrar error visual
+      showCopyNotification('❌ Failed to copy link', 2000);
     }
   };
 
   const shareLink = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Join Gol Play with my referral link!',
-          text: 'Start playing football games and earning rewards with blockchain technology! 🚀⚽💰',
-          url: referralLink
-        });
-      } catch (error) {
-        console.log('Share cancelled or failed');
-      }
+    // Usar utilidad robusta de compartir
+    const result = await shareContent({
+      title: 'Join Gol Play with my referral link!',
+      text: 'Start playing football games and earning rewards with blockchain technology! 🚀⚽💰',
+      url: referralLink
+    }, {
+      showNotification: true,
+      fallbackToPrompt: false
+    });
+
+    if (result.success) {
+      console.log(`✅ Referral link shared via ${result.method}`);
     } else {
+      console.log('❌ Failed to share referral link, trying copy fallback');
       copyLink();
     }
   };

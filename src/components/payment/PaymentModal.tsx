@@ -124,6 +124,53 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
     window.open(`https://bscscan.com/tx/${txHash}`, '_blank');
   };
 
+  const handleShare = () => {
+    // Función robusta de compartir desde modal de pago
+    const shareData = {
+      title: 'Goal Play Payment',
+      text: 'Check out this Goal Play transaction',
+      url: window.location.href
+    };
+
+    // Verificar disponibilidad del Web Share API
+    const canUseWebShare = () => {
+      try {
+        return (
+          navigator.share &&
+          typeof navigator.share === 'function' &&
+          navigator.canShare &&
+          typeof navigator.canShare === 'function' &&
+          navigator.canShare(shareData) &&
+          window.isSecureContext &&
+          (window.location.protocol === 'https:' || window.location.hostname === 'localhost')
+        );
+      } catch (error) {
+        return false;
+      }
+    };
+
+    if (canUseWebShare()) {
+      navigator.share(shareData)
+        .then(() => {
+          console.log('✅ Payment info shared successfully');
+        })
+        .catch((error) => {
+          if (error.name !== 'AbortError') {
+            console.log('❌ Share failed, using clipboard fallback');
+            navigator.clipboard.writeText(window.location.href);
+          }
+        });
+    } else {
+      // Fallback a clipboard
+      try {
+        navigator.clipboard.writeText(window.location.href);
+        console.log('📋 Payment link copied to clipboard');
+      } catch (error) {
+        console.log('❌ Clipboard not available');
+      }
+    }
+  };
+
   const handleClose = () => {
     resetPaymentState();
     setStep('connect');

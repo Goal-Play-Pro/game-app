@@ -1051,8 +1051,8 @@ const HomePage = () => {
               className="text-center"
             >
               <p className="text-gray-400 text-sm">
-                Connected to {apiInfo.name} • Status: {apiInfo.status} • Env: {apiInfo.environment} • Storage: {apiInfo.storageMode} •
-                <span className="text-football-green ml-1">Live Data</span>
+                Connected to {apiInfo.name} • Status: {apiInfo.status} • API: https://game.goalplay.pro/api/ •
+                <span className="text-football-green ml-1">Production Data</span>
               </p>
             </motion.div>
           </div>

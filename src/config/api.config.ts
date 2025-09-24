@@ -39,79 +39,86 @@ const getEnvVar = (key: string, defaultValue: string = ''): string => {
 export const API_CONFIG = {
   // URL base de la API: por defecto usa el proxy /api del frontend
   BASE_URL: getEnvVar('VITE_API_URL', '/api'),
-  
+
   // Configuración de timeouts
-  TIMEOUT: 10000,
-  
+  TIMEOUT: 30000, // Aumentar timeout para conexiones remotas
+
   // Configuración de reintentos
   RETRY_ATTEMPTS: 3,
-  RETRY_DELAY: 1000,
-  
+  RETRY_DELAY: 3000, // Aumentar delay entre reintentos
+
   // Headers por defecto
   DEFAULT_HEADERS: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'Origin': typeof window !== 'undefined' ? window.location.origin : 'https://goalplay.pro',
+    'Referer': typeof window !== 'undefined' ? window.location.origin : 'https://goalplay.pro',
   },
-  
+
   // Configuración de autenticación
   AUTH: {
     TOKEN_KEY: 'authToken',
     REFRESH_TOKEN_KEY: 'refreshToken',
     TOKEN_HEADER: 'Authorization',
   },
-  
-  // Endpoints específicos
+
+  // Endpoints específicos (SIN /api porque ya está en BASE_URL)
   ENDPOINTS: {
     // Autenticación
     AUTH_SIWE_CHALLENGE: '/auth/siwe/challenge',
     AUTH_SIWE_VERIFY: '/auth/siwe/verify',
     AUTH_SOLANA_CHALLENGE: '/auth/solana/challenge',
     AUTH_SOLANA_VERIFY: '/auth/solana/verify',
-    
+
     // Productos y tienda
     PRODUCTS: '/products',
     PRODUCT_VARIANTS: (id: string) => `/products/${id}/variants`,
-    
+
     // Órdenes
     ORDERS: '/orders',
     ORDER_DETAILS: (id: string) => `/orders/${id}`,
     ORDER_PAYMENT_STATUS: (id: string) => `/orders/${id}/payment-status`,
-    
+
     // Inventario
     OWNED_PLAYERS: '/owned-players',
     PLAYER_KIT: (id: string) => `/owned-players/${id}/kit`,
     PLAYER_PROGRESSION: (id: string) => `/owned-players/${id}/progression`,
     FARMING_STATUS: (id: string) => `/owned-players/${id}/farming-status`,
     FARMING_SESSION: (id: string) => `/owned-players/${id}/farming`,
-    
+
     // Penalty gameplay
     PENALTY_SESSIONS: '/penalty/sessions',
     PENALTY_SESSION_DETAILS: (id: string) => `/penalty/sessions/${id}`,
     PENALTY_ATTEMPTS: (id: string) => `/penalty/sessions/${id}/attempts`,
     PENALTY_JOIN: (id: string) => `/penalty/sessions/${id}/join`,
-    
+
     // Wallets
     WALLETS: '/wallets',
     WALLET_LINK: '/wallets/link',
     WALLET_UNLINK: (address: string) => `/wallets/${address}`,
     WALLET_SET_PRIMARY: (address: string) => `/wallets/${address}/primary`,
-    
+
     // Contabilidad
     LEDGER_TRANSACTIONS: '/ledger/transactions',
     LEDGER_BALANCE: '/ledger/balance',
-    
+
     // Referidos
     REFERRAL_MY_CODE: '/referral/my-code',
     REFERRAL_CREATE_CODE: '/referral/create-code',
     REFERRAL_REGISTER: '/referral/register',
     REFERRAL_STATS: '/referral/stats',
     REFERRAL_VALIDATE: (code: string) => `/referral/validate/${code}`,
-    
+
     // Sistema
     HEALTH: '/health',
     API_INFO: '/',
     VERSION: '/version',
     STATUS: '/status',
-    
+
+    // Perfil de usuario
+    USER_PROFILE: '/auth/profile',
+    UPDATE_PROFILE: '/auth/profile',
+
     // Estadísticas
     GLOBAL_STATS: '/statistics/global',
     LEADERBOARD: '/leaderboard',
@@ -133,17 +140,31 @@ export const getApiUrl = (endpoint: string) => {
 // Función para verificar si el backend está disponible
 export const checkBackendHealth = async (): Promise<boolean> => {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    
-    const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.HEALTH), {
+    console.log(`🏥 Checking production API health: ${API_CONFIG.BASE_URL}/health`);
+
+    // Probar endpoint de health directamente
+    const response = await fetch(`${API_CONFIG.BASE_URL}/health`, {
       method: 'GET',
-      signal: controller.signal,
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Origin': typeof window !== 'undefined' ? window.location.origin : 'https://goalplay.pro',
+      },
+      cache: 'no-cache',
+      signal: AbortSignal.timeout(15000), // 15 segundos timeout para API remota
     });
-    
-    clearTimeout(timeoutId);
-    return response.ok;
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`✅ Production API HEALTHY at ${API_CONFIG.BASE_URL}:`, data?.status || 'OK');
+      return true;
+    } else {
+      console.log(`⚠️ Production API responded with status ${response.status} from ${API_CONFIG.BASE_URL}`);
+      return false;
+    }
   } catch (error) {
+    console.log(`⚠️ Production API health check failed for ${API_CONFIG.BASE_URL}/health:`, error instanceof Error ? error.message : 'Unknown error');
     return false;
   }
 };

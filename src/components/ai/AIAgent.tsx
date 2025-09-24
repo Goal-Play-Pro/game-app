@@ -48,6 +48,7 @@ const AIAgent = ({ className = '' }: AIAgentProps) => {
 💰 Token GOAL y staking  
 🏆 Divisiones y estrategias
 👥 Sistema de referidos
+🔗 API: https://game.goalplay.pro/api/
 
 ¡Empecemos! 🚀`;
   };
@@ -197,6 +198,7 @@ Puedo ayudarte con TODO sobre nuestro ecosistema:
 - Conecta tu wallet y añade token GOAL
 - Explora los packs desde $30 USDT
 - Crea tu código de referido (5% comisión)
+- API de producción: https://game.goalplay.pro/api/
 
 ¿Repites tu pregunta? ¡Estoy listo! 🚀⚽`;
   };

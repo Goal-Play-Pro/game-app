@@ -11,6 +11,8 @@ interface NFTCardProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
+import { shareContent } from '../../utils/share.utils';
+
 const NFTCard = ({ nft, showCollection = true, size = 'md' }: NFTCardProps) => {
   const [isLiked, setIsLiked] = useState(nft.isLiked);
   const [likes, setLikes] = useState(nft.likes);
@@ -43,16 +45,19 @@ const NFTCard = ({ nft, showCollection = true, size = 'md' }: NFTCardProps) => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (navigator.share) {
-      navigator.share({
-        title: nft.name,
-        text: nft.description,
-        url: window.location.origin + `/nft/${nft.id}`
-      });
-    } else {
-      // Fallback to clipboard
-      navigator.clipboard.writeText(window.location.origin + `/nft/${nft.id}`);
-    }
+    // Usar utilidad robusta de compartir
+    shareContent({
+      title: nft.name,
+      text: nft.description,
+      url: window.location.origin + `/nft/${nft.id}`
+    }, {
+      showNotification: true,
+      fallbackToPrompt: false
+    }).then((result) => {
+      if (result.success) {
+        console.log(`✅ NFT shared via ${result.method}`);
+      }
+    });
   };
 
   const getRarityColor = (rarity: string) => {
