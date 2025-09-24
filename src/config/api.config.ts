@@ -36,6 +36,12 @@ const getEnvVar = (key: string, defaultValue: string = ''): string => {
   return defaultValue;
 };
 
+const defaultFrontendUrl = typeof window !== 'undefined'
+  ? window.location.origin
+  : 'https://game.goalplay.pro';
+
+const frontendBaseUrl = getEnvVar('VITE_FRONTEND_URL', defaultFrontendUrl);
+
 export const API_CONFIG = {
   // URL base de la API: por defecto usa el proxy /api del frontend
   BASE_URL: getEnvVar('VITE_API_URL', '/api'),
@@ -51,8 +57,8 @@ export const API_CONFIG = {
   DEFAULT_HEADERS: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'Origin': typeof window !== 'undefined' ? window.location.origin : 'https://goalplay.pro',
-    'Referer': typeof window !== 'undefined' ? window.location.origin : 'https://goalplay.pro',
+    'Origin': frontendBaseUrl,
+    'Referer': frontendBaseUrl,
   },
 
   // Configuración de autenticación
@@ -124,6 +130,9 @@ export const API_CONFIG = {
     LEADERBOARD: '/leaderboard',
     USER_STATS: '/statistics/user',
   },
+
+  // URL base del frontend para compartir links (puede apuntar a otro dominio distinto a la API)
+  FRONTEND_URL: frontendBaseUrl,
 };
 
 // Función para cambiar la URL base dinámicamente
@@ -149,7 +158,7 @@ export const checkBackendHealth = async (): Promise<boolean> => {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Origin': typeof window !== 'undefined' ? window.location.origin : 'https://goalplay.pro',
+        'Origin': frontendBaseUrl,
       },
       cache: 'no-cache',
       signal: AbortSignal.timeout(15000), // 15 segundos timeout para API remota

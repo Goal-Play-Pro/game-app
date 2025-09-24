@@ -1,3 +1,5 @@
+import { API_CONFIG } from '../config/api.config';
+
 // Referral API Service - Mock implementation for development
 export class ReferralApiService {
   static async getMyReferralCode() {
@@ -39,7 +41,7 @@ export class ReferralApiService {
       pendingCommissions: '0.00',
       paidCommissions: '0.00',
       thisMonthCommissions: '0.00',
-      referralLink: 'https://goalplay.pro?ref=DEMO123',
+      referralLink: `${API_CONFIG.FRONTEND_URL}?ref=DEMO123`,
       recentReferrals: [],
       recentCommissions: []
     };

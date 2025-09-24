@@ -133,8 +133,8 @@ const makeRequest = async <T = any>(
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Origin': typeof window !== 'undefined' ? window.location.origin : 'https://goalplay.pro',
-          'Referer': typeof window !== 'undefined' ? window.location.origin : 'https://goalplay.pro',
+          'Origin': API_CONFIG.FRONTEND_URL,
+          'Referer': API_CONFIG.FRONTEND_URL,
           ...config?.headers,
         },
         withCredentials: false,
@@ -289,7 +289,7 @@ const getFallbackData = (endpoint: string, method: string, data?: any): any => {
         pendingCommissions: '0.00',
         paidCommissions: '0.00',
         thisMonthCommissions: '0.00',
-        referralLink: `https://goalplay.pro?ref=${referralCode}`,
+        referralLink: `${API_CONFIG.FRONTEND_URL}?ref=${referralCode}`,
         recentReferrals: [],
         recentCommissions: []
       };

@@ -276,7 +276,7 @@ export class ReferralService {
         pendingCommissions: pendingCommissions.toFixed(2),
         paidCommissions: paidCommissions.toFixed(2),
         thisMonthCommissions: thisMonthCommissions.toFixed(2),
-        referralLink: `${process.env.FRONTEND_URL || 'https://goalplay.pro'}?ref=${referralCode.code}`,
+        referralLink: `${(process.env.FRONTEND_URL || 'https://game.goalplay.pro').replace(/\/$/, '')}?ref=${referralCode.code}`,
         recentReferrals: registrations,
         recentCommissions: commissions,
       };

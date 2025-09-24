@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ApiService from '../services/api';
+import { API_CONFIG } from '../config/api.config';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ReferralDashboard from '../components/referral/ReferralDashboard';
 import WalletManager from '../components/wallet/WalletManager';
@@ -170,7 +171,8 @@ const ProfilePage = () => {
       console.log('✅ Referral code created successfully via production API:', data);
       queryClient.invalidateQueries({ queryKey: ['my-referral-code'] });
       queryClient.invalidateQueries({ queryKey: ['referral-stats'] });
-      alert(`✅ ¡Código creado exitosamente!\n\nWallet: ${connectedWalletAddress?.slice(0, 6)}...${connectedWalletAddress?.slice(-4)}\nTu código: ${data.code}\nTu link: https://goalplay.pro?ref=${data.code}\n\n¡Compártelo y gana 5% de cada compra!`);
+      const referralBaseUrl = API_CONFIG.FRONTEND_URL;
+      alert(`✅ ¡Código creado exitosamente!\n\nWallet: ${connectedWalletAddress?.slice(0, 6)}...${connectedWalletAddress?.slice(-4)}\nTu código: ${data.code}\nTu link: ${referralBaseUrl}?ref=${data.code}\n\n¡Compártelo y gana 5% de cada compra!`);
     },
     onError: (error) => {
       console.error('❌ Error creating referral code via production API:', error);
@@ -737,11 +739,11 @@ const ProfilePage = () => {
                         <div className="flex items-center space-x-2">
                           <div className="flex-1 glass rounded-lg p-3">
                             <div className="text-white font-mono text-sm break-all">
-                              {referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`}
+                              {referralStats?.referralLink || `${API_CONFIG.FRONTEND_URL}?ref=${referralCode.code}`}
                             </div>
                           </div>
                           <button
-                            onClick={() => navigator.clipboard.writeText(referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`)}
+                            onClick={() => navigator.clipboard.writeText(referralStats?.referralLink || `${API_CONFIG.FRONTEND_URL}?ref=${referralCode.code}`)}
                             className="btn-secondary"
                           >
                             <Copy className="w-4 h-4" />
@@ -751,7 +753,7 @@ const ProfilePage = () => {
 
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <button
-                          onClick={() => navigator.clipboard.writeText(referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`)}
+                          onClick={() => navigator.clipboard.writeText(referralStats?.referralLink || `${API_CONFIG.FRONTEND_URL}?ref=${referralCode.code}`)}
                           className="btn-secondary flex items-center justify-center space-x-2"
                         >
                           <Copy className="w-4 h-4" />
@@ -763,7 +765,7 @@ const ProfilePage = () => {
                               navigator.share({
                                 title: 'Join Gol Play!',
                                 text: '🚀 Join me on Gol Play and earn rewards playing football! ⚽💰',
-                                url: referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`
+                                url: referralStats?.referralLink || `${API_CONFIG.FRONTEND_URL}?ref=${referralCode.code}`
                               });
                             }
                           }}
@@ -773,14 +775,14 @@ const ProfilePage = () => {
                           <span>Share</span>
                         </button>
                         <button
-                          onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent('🚀 Join me on Gol Play - The ultimate football gaming platform! ⚽💰')}&url=${encodeURIComponent(referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`)}`, '_blank')}
+                          onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent('🚀 Join me on Gol Play - The ultimate football gaming platform! ⚽💰')}&url=${encodeURIComponent(referralStats?.referralLink || `${API_CONFIG.FRONTEND_URL}?ref=${referralCode.code}`)}`, '_blank')}
                           className="btn-secondary flex items-center justify-center space-x-2"
                         >
                           <ExternalLink className="w-4 h-4" />
                           <span>Tweet</span>
                         </button>
                         <button
-                          onClick={() => window.open(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(referralStats?.referralLink || `https://goalplay.pro?ref=${referralCode.code}`)}`, '_blank')}
+                          onClick={() => window.open(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(referralStats?.referralLink || `${API_CONFIG.FRONTEND_URL}?ref=${referralCode.code}`)}`, '_blank')}
                           className="btn-secondary flex items-center justify-center space-x-2"
                         >
                           <span>QR</span>
