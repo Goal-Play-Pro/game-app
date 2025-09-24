@@ -1,21 +1,10 @@
 import { useEffect, useState } from 'react';
-import { API_CONFIG } from '../config/api.config';
+import ApiService from '../services/api';
 
 export const useAuthStatus = (): boolean => {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window === 'undefined') return false;
-    
-    // Verificar múltiples fuentes de autenticación
-    const token = localStorage.getItem(API_CONFIG.AUTH.TOKEN_KEY) || 
-                  localStorage.getItem('authToken') ||
-                  localStorage.getItem('jwt_token') ||
-                  localStorage.getItem('accessToken');
-    
-    const walletConnected = localStorage.getItem('walletConnected') === 'true';
-    const walletAddress = localStorage.getItem('walletAddress');
-    
-    // Considerar autenticado si tiene token O wallet conectada
-    return !!(token || (walletConnected && walletAddress));
+    return ApiService.isAuthenticated();
   });
 
   useEffect(() => {
@@ -24,33 +13,21 @@ export const useAuthStatus = (): boolean => {
     }
 
     const syncStatus = () => {
-      const token = localStorage.getItem(API_CONFIG.AUTH.TOKEN_KEY) || 
-                    localStorage.getItem('authToken') ||
-                    localStorage.getItem('jwt_token') ||
-                    localStorage.getItem('accessToken');
-      
-      const walletConnected = localStorage.getItem('walletConnected') === 'true';
-      const walletAddress = localStorage.getItem('walletAddress');
-      
-      const newAuthStatus = !!(token || (walletConnected && walletAddress));
-      
+      const tokenExists = ApiService.isAuthenticated();
+
+      const newAuthStatus = tokenExists;
+
       if (newAuthStatus !== isAuthenticated) {
         console.log(`🔐 Auth status changed: ${newAuthStatus ? 'AUTHENTICATED' : 'NOT AUTHENTICATED'}`);
-        console.log(`📝 Token exists: ${!!token}`);
-        console.log(`🔗 Wallet connected: ${walletConnected}`);
-        console.log(`📍 Wallet address: ${walletAddress ? walletAddress.slice(0, 10) + '...' : 'none'}`);
       }
       
       setIsAuthenticated(newAuthStatus);
     };
 
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === API_CONFIG.AUTH.TOKEN_KEY || 
-          event.key === 'authToken' ||
+      if (event.key === 'authToken' ||
           event.key === 'jwt_token' ||
-          event.key === 'accessToken' ||
-          event.key === 'walletConnected' ||
-          event.key === 'walletAddress') {
+          event.key === 'accessToken') {
         syncStatus();
       }
     };
@@ -59,8 +36,7 @@ export const useAuthStatus = (): boolean => {
     syncStatus();
 
     window.addEventListener('storage', handleStorage);
-
-    const interval = window.setInterval(syncStatus, 1000);
+    const interval = window.setInterval(syncStatus, 1500);
 
     return () => {
       window.removeEventListener('storage', handleStorage);

@@ -1,9 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import ApiService from '../services/api';
+import { useAuthStatus } from './useAuthStatus';
 
 export const useReferral = () => {
   const queryClient = useQueryClient();
+  const isAuthenticated = useAuthStatus();
 
   // Register referral mutation
   const registerReferralMutation = useMutation({
@@ -35,19 +37,34 @@ export const useReferral = () => {
   }, []);
 
   // Function to register pending referral after user authentication
-  const registerPendingReferral = async () => {
+  const registerPendingReferral = useCallback(async () => {
     const pendingCode = localStorage.getItem('pendingReferralCode');
     
-    if (pendingCode) {
-      try {
-        await registerReferralMutation.mutateAsync(pendingCode);
-        localStorage.removeItem('pendingReferralCode');
-        console.log('✅ Pending referral registered');
-      } catch (error) {
-        console.error('❌ Error registering referral:', error);
-      }
+    if (!pendingCode) {
+      return false;
     }
-  };
+
+    if (!ApiService.isAuthenticated()) {
+      console.log('⏳ Waiting for authentication before registering referral');
+      return false;
+    }
+
+    try {
+      await registerReferralMutation.mutateAsync(pendingCode);
+      localStorage.removeItem('pendingReferralCode');
+      console.log('✅ Pending referral registered');
+      return true;
+    } catch (error) {
+      console.error('❌ Error registering referral:', error);
+      return false;
+    }
+  }, [registerReferralMutation]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      registerPendingReferral();
+    }
+  }, [isAuthenticated, registerPendingReferral]);
 
   // Function to validate referral code
   const validateReferralCode = async (code: string) => {

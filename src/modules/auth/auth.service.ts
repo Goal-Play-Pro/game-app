@@ -186,12 +186,28 @@ export class AuthService {
   }
 
   private buildSiweMessage(address: string, chainId: number, statement: string, nonce: string, expiresAt: Date): string {
-    const domain = 'localhost:3001';
-    const uri = 'http://localhost:3001';
+    const defaultUrl = process.env.NODE_ENV === 'production'
+      ? 'https://game.goalplay.pro'
+      : 'http://localhost:5173';
+
+    const baseUrl = process.env.FRONTEND_URL || defaultUrl;
+
+    let domain = 'game.goalplay.pro';
+    let origin = 'https://game.goalplay.pro';
+
+    try {
+      const normalizedUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+      const parsed = new URL(normalizedUrl);
+      domain = parsed.host;
+      origin = parsed.origin;
+    } catch (error) {
+      console.warn('⚠️ Could not parse FRONTEND_URL, using defaults for SIWE message');
+    }
+
     const version = '1';
     const issuedAt = new Date().toISOString();
 
-    return `${domain} wants you to sign in with your Ethereum account:\n${address}\n\n${statement}\n\nURI: ${uri}\nVersion: ${version}\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${expiresAt.toISOString()}`;
+    return `${domain} wants you to sign in with your Ethereum account:\n${address}\n\n${statement}\n\nURI: ${origin}\nVersion: ${version}\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${expiresAt.toISOString()}`;
   }
 
   private getChainType(chainId: number): string {

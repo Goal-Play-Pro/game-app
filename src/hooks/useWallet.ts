@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ChainType } from '../types';
 import { useReferral } from './useReferral';
-
+import ApiService from '../services/api';
+import { API_CONFIG } from '../config/api.config';
 
 interface WalletState {
   isConnected: boolean;
@@ -11,7 +12,6 @@ interface WalletState {
   isConnecting: boolean;
   error: string | null;
 }
-
 
 export const useWallet = () => {
   const { registerPendingReferral } = useReferral();
@@ -57,28 +57,120 @@ export const useWallet = () => {
     }
   };
 
+  const persistWalletConnection = (address: string, chainIdNumber: number) => {
+    localStorage.setItem('walletConnected', 'true');
+    localStorage.setItem('walletAddress', address);
+    localStorage.setItem('walletChainId', chainIdNumber.toString());
+  };
+
+  const clearWalletPersistence = () => {
+    localStorage.removeItem('walletConnected');
+    localStorage.removeItem('walletAddress');
+    localStorage.removeItem('walletChainId');
+  };
+
+  const storeAuthToken = (token: string) => {
+    localStorage.setItem(API_CONFIG.AUTH.TOKEN_KEY, token);
+    localStorage.setItem('authToken', token);
+  };
+
+  const removeAuthToken = () => {
+    localStorage.removeItem(API_CONFIG.AUTH.TOKEN_KEY);
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('jwt_token');
+    localStorage.removeItem('accessToken');
+  };
+
+  const authenticateWallet = useCallback(async (address: string, chainIdNumber: number) => {
+    const ethereum = (window as any).ethereum;
+    if (!ethereum) {
+      throw new Error('Ethereum provider not available');
+    }
+
+    try {
+      const challenge = await ApiService.createSiweChallenge(address, chainIdNumber);
+      const message = challenge.message;
+
+      let signature: string;
+      try {
+        signature = await ethereum.request({
+          method: 'personal_sign',
+          params: [message, address],
+        });
+      } catch (signError: any) {
+        if (signError?.code === 4001) {
+          throw new Error('Signature request was rejected');
+        }
+        throw signError;
+      }
+
+      const authResponse = await ApiService.verifySiweSignature(message, signature);
+      storeAuthToken(authResponse.accessToken);
+      console.log('✅ Wallet authenticated via SIWE');
+
+      await registerPendingReferral();
+      return authResponse;
+    } catch (error) {
+      removeAuthToken();
+      throw error;
+    }
+  }, [registerPendingReferral]);
+
   const checkConnection = useCallback(async () => {
     const ethereum = (window as any).ethereum;
     if (!ethereum) return;
 
     try {
       const accounts = await ethereum.request({ method: 'eth_accounts' });
-      const chainId = await ethereum.request({ method: 'eth_chainId' });
-      
-      if (accounts.length > 0) {
+      if (accounts.length === 0) {
+        clearWalletPersistence();
+        removeAuthToken();
         setWalletState({
-          isConnected: true,
-          address: accounts[0],
-          chainId: parseInt(chainId, 16),
-          chainType: getChainType(parseInt(chainId, 16)),
+          isConnected: false,
+          address: null,
+          chainId: null,
+          chainType: null,
           isConnecting: false,
           error: null,
         });
+        return;
+      }
+
+      const chainId = await ethereum.request({ method: 'eth_chainId' });
+      const chainIdNumber = parseInt(chainId, 16);
+
+      setWalletState({
+        isConnected: true,
+        address: accounts[0],
+        chainId: chainIdNumber,
+        chainType: getChainType(chainIdNumber),
+        isConnecting: false,
+        error: null,
+      });
+
+      persistWalletConnection(accounts[0], chainIdNumber);
+
+      if (!ApiService.isAuthenticated()) {
+        try {
+          await authenticateWallet(accounts[0], chainIdNumber);
+        } catch (error: any) {
+          console.error('❌ Wallet authentication failed during auto-connect:', error);
+          clearWalletPersistence();
+          removeAuthToken();
+          setWalletState({
+            isConnected: false,
+            address: null,
+            chainId: null,
+            chainType: null,
+            isConnecting: false,
+            error: error?.message || 'Wallet authentication failed',
+          });
+        }
       }
     } catch (error) {
       console.error('Error checking wallet connection:', error);
     }
-  }, []);
+  }, [authenticateWallet]);
 
   const connectWallet = async () => {
     const ethereum = (window as any).ethereum;
@@ -125,30 +217,32 @@ export const useWallet = () => {
       const finalChainId = await ethereum.request({ method: 'eth_chainId' });
       const finalChainIdNumber = parseInt(finalChainId, 16);
 
-      setWalletState({
-        isConnected: true,
-        address: accounts[0],
-        chainId: finalChainIdNumber,
-        chainType: getChainType(finalChainIdNumber),
-        isConnecting: false,
-        error: null,
-      });
+      try {
+        await authenticateWallet(accounts[0], finalChainIdNumber);
+        persistWalletConnection(accounts[0], finalChainIdNumber);
 
-      // Store connection in localStorage
-      localStorage.setItem('walletConnected', 'true');
-      localStorage.setItem('walletAddress', accounts[0]);
-      localStorage.setItem('walletChainId', finalChainIdNumber.toString());
-      
-      // También guardar como token de autenticación para compatibilidad
-      localStorage.setItem('authToken', `wallet:${accounts[0]}`);
+        setWalletState({
+          isConnected: true,
+          address: accounts[0],
+          chainId: finalChainIdNumber,
+          chainType: getChainType(finalChainIdNumber),
+          isConnecting: false,
+          error: null,
+        });
 
-      // Register pending referral if exists
-      setTimeout(() => {
-        registerPendingReferral();
-      }, 1000);
-      
-      // Log de conexión exitosa
-      console.log(`✅ Wallet connected: ${accounts[0]} on ${getNetworkName(finalChainIdNumber)}`);
+        console.log(`✅ Wallet connected: ${accounts[0]} on ${getNetworkName(finalChainIdNumber)}`);
+      } catch (authError: any) {
+        console.error('❌ Wallet authentication failed:', authError);
+        clearWalletPersistence();
+        setWalletState({
+          isConnected: false,
+          address: null,
+          chainId: null,
+          chainType: null,
+          isConnecting: false,
+          error: authError?.message || 'Wallet authentication failed',
+        });
+      }
 
     } catch (error: any) {
       console.error('Error connecting wallet:', error);
@@ -170,13 +264,8 @@ export const useWallet = () => {
       error: null,
     });
 
-    // Clear localStorage
-    localStorage.removeItem('walletConnected');
-    localStorage.removeItem('walletAddress');
-    localStorage.removeItem('walletChainId');
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('jwt_token');
-    localStorage.removeItem('accessToken');
+    clearWalletPersistence();
+    removeAuthToken();
     
     console.log('🔌 Wallet disconnected');
   };
@@ -207,15 +296,39 @@ export const useWallet = () => {
     const ethereum = (window as any).ethereum;
     if (!ethereum) return;
 
-    const handleAccountsChanged = (accounts: string[]) => {
+    const handleAccountsChanged = async (accounts: string[]) => {
       if (accounts.length === 0) {
         disconnectWallet();
-      } else {
-        setWalletState(prev => ({
-          ...prev,
+        return;
+      }
+
+      const chainIdHex = await ethereum.request({ method: 'eth_chainId' });
+      const chainIdNumber = parseInt(chainIdHex, 16);
+
+      try {
+        await authenticateWallet(accounts[0], chainIdNumber);
+        persistWalletConnection(accounts[0], chainIdNumber);
+
+        setWalletState({
+          isConnected: true,
           address: accounts[0],
-        }));
-        localStorage.setItem('walletAddress', accounts[0]);
+          chainId: chainIdNumber,
+          chainType: getChainType(chainIdNumber),
+          isConnecting: false,
+          error: null,
+        });
+      } catch (error: any) {
+        console.error('❌ Wallet authentication failed after account change:', error);
+        clearWalletPersistence();
+        removeAuthToken();
+        setWalletState({
+          isConnected: false,
+          address: null,
+          chainId: null,
+          chainType: null,
+          isConnecting: false,
+          error: error?.message || 'Wallet authentication failed',
+        });
       }
     };
 
@@ -236,18 +349,8 @@ export const useWallet = () => {
     const savedAddress = localStorage.getItem('walletAddress');
     const savedChainId = localStorage.getItem('walletChainId');
     
-    if (wasConnected === 'true') {
+    if (wasConnected === 'true' || (savedAddress && savedChainId)) {
       checkConnection();
-    } else if (savedAddress && savedChainId) {
-      // Restore from localStorage if available
-      setWalletState({
-        isConnected: true,
-        address: savedAddress,
-        chainId: parseInt(savedChainId),
-        chainType: getChainType(parseInt(savedChainId)),
-        isConnecting: false,
-        error: null,
-      });
     }
 
     return () => {
@@ -256,7 +359,7 @@ export const useWallet = () => {
         ethereum.removeListener?.('chainChanged', handleChainChanged);
       }
     };
-  }, [checkConnection]);
+  }, [authenticateWallet, checkConnection]);
 
   return {
     ...walletState,

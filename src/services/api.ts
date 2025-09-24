@@ -542,20 +542,13 @@ export class ApiService {
   }
 
   static isAuthenticated(): boolean {
-    const statsWallet = localStorage.getItem('walletAddress');
-    const referralCode = statsWallet ? statsWallet.slice(2, 8).toUpperCase() + 'REF' : 'DEMO123';
-    
     const token = this.getAuthToken();
-    const walletConnected = localStorage.getItem('walletConnected') === 'true';
-    const walletAddress = localStorage.getItem('walletAddress');
-    
-    // Considerar autenticado si tiene token O wallet conectada
-    const isAuth = !!(token || (walletConnected && walletAddress));
-    
+    const isAuth = !!token;
+
     if (isDevelopment()) {
-      console.log(`🔐 Auth check - Token: ${!!token}, Wallet: ${walletConnected}, Address: ${walletAddress ? 'yes' : 'no'}, Result: ${isAuth}`);
+      console.log(`🔐 Auth check - Token present: ${isAuth}`);
     }
-    
+
     return isAuth;
   }
 

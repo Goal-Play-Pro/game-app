@@ -2,18 +2,21 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Gift, X, Users, DollarSign } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { ReferralApiService } from '../../services/referral.api';
+import ApiService from '../../services/api';
+import { useAuthStatus } from '../../hooks/useAuthStatus';
 
 const ReferralBanner = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
+  const isAuthenticated = useAuthStatus();
 
   // Check if user has referral code
   const { data: referralCode } = useQuery({
-    queryKey: ['my-referral-code'],
-    queryFn: () => {
+    queryKey: ['my-referral-code', isAuthenticated],
+    enabled: isAuthenticated,
+    queryFn: async () => {
       try {
-        return ReferralApiService.getMyReferralCode();
+        return await ApiService.getMyReferralCode();
       } catch (error) {
         console.warn('Referral code not available');
         return null;
@@ -25,10 +28,10 @@ const ReferralBanner = () => {
   useEffect(() => {
     // Show banner if user doesn't have referral code and hasn't dismissed it
     const dismissed = localStorage.getItem('referralBannerDismissed');
-    if (!referralCode && !dismissed) {
+    if (isAuthenticated && !referralCode && !dismissed) {
       setIsVisible(true);
     }
-  }, [referralCode]);
+  }, [isAuthenticated, referralCode]);
 
   const handleDismiss = () => {
     setIsDismissed(true);
@@ -41,7 +44,7 @@ const ReferralBanner = () => {
     window.location.href = '/profile?tab=referrals';
   };
 
-  if (!isVisible || isDismissed || referralCode) {
+  if (!isAuthenticated || !isVisible || isDismissed || referralCode) {
     return null;
   }
 
