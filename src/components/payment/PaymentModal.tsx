@@ -27,20 +27,24 @@ interface PaymentModalProps {
 }
 
 const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
-  const [step, setStep] = useState<'connect' | 'balance' | 'confirm' | 'processing' | 'success' | 'error'>('connect');
+  const [step, setStep] = useState<'connect' | 'balance' | 'confirm' | 'processing' | 'confirming' | 'success' | 'error'>('connect');
   const [usdtBalance, setUsdtBalance] = useState<string>('0.00');
   const [gasEstimate, setGasEstimate] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
 
   const { address, isConnected, connectWallet } = useWallet();
-  const { 
-    initiatePayment, 
-    checkUSDTBalance, 
+  const {
+    initiatePayment,
+    checkUSDTBalance,
     estimateGasCosts,
-    isProcessing, 
-    error, 
+    isProcessing,
+    error,
     transactionHash,
-    resetPaymentState 
+    resetPaymentState,
+    status,
+    confirmations,
+    requiredConfirmations,
+    fetchPaymentStatus,
   } = usePayment();
 
   // Countdown timer
@@ -71,14 +75,51 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
 
   // Monitor payment state
   useEffect(() => {
+    if (error) {
+      setStep('error');
+      return;
+    }
+
+    if (status === 'confirming') {
+      setStep('confirming');
+      return;
+    }
+
+    if (status === 'completed') {
+      setStep('success');
+      return;
+    }
+
     if (isProcessing) {
       setStep('processing');
-    } else if (transactionHash) {
-      setStep('success');
-    } else if (error) {
-      setStep('error');
+    } else if (step === 'processing') {
+      setStep('confirm');
     }
-  }, [isProcessing, transactionHash, error]);
+  }, [isProcessing, status, error, step]);
+
+  useEffect(() => {
+    if (!isOpen || status !== 'confirming') return;
+
+    let isMounted = true;
+
+    const pollStatus = async () => {
+      try {
+        await fetchPaymentStatus(order.id);
+      } catch (err) {
+        if (isMounted) {
+          console.error('Error polling payment status:', err);
+        }
+      }
+    };
+
+    pollStatus();
+    const interval = setInterval(pollStatus, 15000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isOpen, status, order.id, fetchPaymentStatus]);
 
   const loadBalanceAndGas = async () => {
     if (!address) return;
@@ -391,7 +432,7 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                   </div>
                   <h4 className="text-lg font-semibold text-white mb-2">Processing Payment</h4>
                   <p className="text-gray-400 mb-6">
-                    Please confirm the transaction in MetaMask and wait for blockchain confirmation
+                    Please confirm the transaction in MetaMask. We will update once it reaches the blockchain.
                   </p>
                   
                   <div className="glass rounded-lg p-4">
@@ -402,11 +443,79 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                       </div>
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-gray-400 rounded-full" />
-                        <span className="text-gray-400">Waiting for blockchain confirmation...</span>
+                        <span className="text-gray-400">Blockchain confirmation will start after MetaMask approval</span>
                       </div>
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-gray-400 rounded-full" />
                         <span className="text-gray-400">Processing gacha draw...</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {step === 'confirming' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-center"
+                >
+                  <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Clock className="w-8 h-8 text-yellow-400" />
+                  </div>
+                  <h4 className="text-lg font-semibold text-white mb-2">Waiting for Confirmations</h4>
+                  <p className="text-gray-400 mb-6">
+                    Transaction sent. Your order completes automatically once the blockchain reaches {requiredConfirmations} confirmations.
+                  </p>
+
+                  <div className="glass rounded-lg p-5 space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm text-gray-400 mb-2">
+                        <span>Confirmations</span>
+                        <span>
+                          {Math.min(confirmations, requiredConfirmations)} / {requiredConfirmations}
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-football-green transition-all duration-300"
+                          style={{ width: `${Math.min(confirmations / requiredConfirmations, 1) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {transactionHash && (
+                      <div className="text-left text-sm">
+                        <div className="text-gray-400 mb-1">Transaction Hash</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-mono text-xs">
+                            {transactionHash.slice(0, 10)}...{transactionHash.slice(-8)}
+                          </span>
+                          <button
+                            onClick={() => copyAddress(transactionHash)}
+                            className="p-1 text-gray-400 hover:text-white transition-colors"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openInExplorer(transactionHash)}
+                            className="p-1 text-gray-400 hover:text-white transition-colors"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => fetchPaymentStatus(order.id)}
+                        className="btn-outline w-full"
+                      >
+                        Refresh Status
+                      </button>
+                      <div className="text-xs text-gray-500">
+                        This may take a few minutes depending on network congestion.
                       </div>
                     </div>
                   </div>

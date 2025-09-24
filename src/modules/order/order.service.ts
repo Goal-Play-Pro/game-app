@@ -14,6 +14,8 @@ import { BlockchainService } from '../../services/blockchain.service';
 export class OrderService {
   private readonly logger = new Logger(OrderService.name);
 
+  private readonly REQUIRED_CONFIRMATIONS = 12;
+
   constructor(
     @InjectRepository(Order)
     private orderRepository: Repository<Order>,
@@ -80,20 +82,19 @@ export class OrderService {
     this.logger.log(`📦 Order created: ${order.id} for $${totalPrice.toFixed(2)} USDT`);
 
     // Start payment monitoring
-    this.startPaymentMonitoring(order.id);
+    this.schedulePaymentCheck(order.id, 60000);
 
     return order;
   }
 
-  private async startPaymentMonitoring(orderId: string) {
-    // Mock payment verification - replace with real blockchain monitoring
+  private schedulePaymentCheck(orderId: string, delay: number = 60000) {
     setTimeout(async () => {
       try {
         await this.checkOrderPayment(orderId);
       } catch (error) {
         this.logger.error(`Error checking payment for order ${orderId}:`, error);
       }
-    }, 60000); // Check after 1 minute
+    }, delay);
   }
 
   private async checkOrderPayment(orderId: string) {
@@ -102,66 +103,21 @@ export class OrderService {
       relations: ['productVariant']
     });
     
-    if (!order || order.status !== 'pending') {
+    if (!order || !['pending', 'pending_confirmations'].includes(order.status)) {
       return;
     }
 
     this.logger.log(`🔍 Verificando pago real para orden ${orderId}`);
     
     try {
-      // Buscar transacciones USDT recientes a la wallet de recepción
-      const recentTxs = await this.blockchainService.getUSDTTransactionsForAddress(
-        order.receivingWallet,
-        await this.getCurrentBlockNumber() - 1000 // Últimos ~1000 bloques
-      );
-
-      // Buscar transacción que coincida con la orden
-      const matchingTx = recentTxs.find(tx => 
-        tx.from.toLowerCase() === order.paymentWallet.toLowerCase() &&
-        tx.to.toLowerCase() === order.receivingWallet.toLowerCase() &&
-        this.compareAmounts(tx.value, order.totalPriceUSDT)
-      );
-
-      if (matchingTx) {
-        this.logger.log(`💰 Transacción encontrada para orden ${orderId}: ${matchingTx.hash}`);
-        
-        // Verificar la transacción completamente
-        const verification = await this.blockchainService.verifyUSDTTransaction(
-          matchingTx.hash,
-          order.paymentWallet,
-          order.receivingWallet,
-          order.totalPriceUSDT
-        );
-
-        if (verification.isValid) {
-          this.logger.log(`✅ Pago verificado para orden ${orderId}`);
-          
-          // Verificar actividad sospechosa
-          const suspiciousCheck = await this.blockchainService.detectSuspiciousActivity(order.paymentWallet);
-          if (suspiciousCheck.isSuspicious) {
-            this.logger.warn(`⚠️ Actividad sospechosa detectada para ${order.paymentWallet}: ${suspiciousCheck.reasons.join(', ')}`);
-          }
-      
-          // Actualizar orden con datos reales
-          await this.orderRepository.update(orderId, {
-            status: 'paid',
-            transactionHash: matchingTx.hash,
-            blockNumber: parseInt(matchingTx.blockNumber),
-            confirmations: verification.transaction ? 
-              await this.getConfirmations(verification.transaction.blockNumber) : 12,
-            paidAt: new Date(parseInt(matchingTx.timeStamp) * 1000),
-          });
-
-          // Procesar fulfillment
-          await this.fulfillOrder(orderId);
-        } else {
-          this.logger.warn(`❌ Verificación fallida para orden ${orderId}: ${verification.error}`);
-        }
-      } else {
-        this.logger.log(`⏳ No se encontró pago para orden ${orderId}`);
-      }
+      await this.verifyAndUpdateOrder(order);
     } catch (error) {
       this.logger.error(`❌ Error verificando pago para orden ${orderId}:`, error);
+    } finally {
+      const updated = await this.orderRepository.findOne({ where: { id: orderId } });
+      if (updated && ['pending', 'pending_confirmations'].includes(updated.status)) {
+        this.schedulePaymentCheck(orderId, 60000);
+      }
     }
   }
 
@@ -225,8 +181,8 @@ export class OrderService {
       status: order.status,
       transactionHash: order.transactionHash,
       confirmations: order.confirmations || 0,
-      requiredConfirmations: 12,
-      estimatedConfirmationTime: order.status === 'paid' ? 'Confirmed' : '5-10 minutes',
+      requiredConfirmations: this.REQUIRED_CONFIRMATIONS,
+      estimatedConfirmationTime: order.status === 'fulfilled' || order.status === 'paid' ? 'Confirmed' : '5-10 minutes',
     };
   }
 
@@ -248,7 +204,7 @@ export class OrderService {
   async processPaymentNotification(orderId: string, transactionHash: string, userId: string) {
     const order = await this.getOrderById(orderId, userId);
     
-    if (order.status !== 'pending') {
+    if (!['pending', 'pending_confirmations'].includes(order.status)) {
       throw new BadRequestException('Order is not pending payment');
     }
 
@@ -269,22 +225,46 @@ export class OrderService {
 
     this.logger.log(`✅ Payment verified for order ${orderId}`);
 
-    // Actualizar orden con datos de la transacción
-    await this.orderRepository.update(orderId, {
-      status: 'paid',
+    const confirmations = verification.transaction
+      ? await this.getConfirmations(verification.transaction.blockNumber)
+      : 0;
+
+    const updatePayload: Partial<Order> = {
       transactionHash,
       blockNumber: verification.transaction?.blockNumber,
-      confirmations: verification.transaction ? 
-        await this.getConfirmations(verification.transaction.blockNumber) : 12,
-      paidAt: new Date(),
+      confirmations,
+      paidAt: order.paidAt ?? new Date(),
+    };
+
+    if (confirmations >= this.REQUIRED_CONFIRMATIONS) {
+      await this.orderRepository.update(orderId, {
+        ...updatePayload,
+        status: 'paid',
+      });
+
+      await this.fulfillOrder(orderId);
+
+      return {
+        success: true,
+        status: 'fulfilled',
+        confirmations: this.REQUIRED_CONFIRMATIONS,
+        requiredConfirmations: this.REQUIRED_CONFIRMATIONS,
+        transactionHash,
+      };
+    }
+
+    await this.orderRepository.update(orderId, {
+      ...updatePayload,
+      status: 'pending_confirmations',
     });
 
-    // Procesar fulfillment inmediatamente
-    await this.fulfillOrder(orderId);
+    this.schedulePaymentCheck(orderId, 60000);
 
     return {
       success: true,
-      message: 'Payment verified and order fulfilled',
+      status: 'pending_confirmations',
+      confirmations,
+      requiredConfirmations: this.REQUIRED_CONFIRMATIONS,
       transactionHash,
     };
   }
@@ -331,6 +311,89 @@ export class OrderService {
       await this.orderRepository.update(orderId, {
         status: 'cancelled',
         cancelledAt: new Date(),
+      });
+    }
+  }
+
+  private async verifyAndUpdateOrder(order: Order) {
+    let verificationResult: { isValid: boolean; transaction?: any; receipt?: any; transferEvent?: any; error?: string } | null = null;
+    let transactionHash = order.transactionHash;
+
+    if (!transactionHash) {
+      const recentTxs = await this.blockchainService.getUSDTTransactionsForAddress(
+        order.receivingWallet,
+        await this.getCurrentBlockNumber() - 1000
+      );
+
+      const matchingTx = recentTxs.find(tx =>
+        tx.from.toLowerCase() === order.paymentWallet.toLowerCase() &&
+        tx.to.toLowerCase() === order.receivingWallet.toLowerCase() &&
+        this.compareAmounts(tx.value, order.totalPriceUSDT)
+      );
+
+      if (!matchingTx) {
+        this.logger.log(`⏳ No se encontró pago para orden ${order.id}`);
+        return;
+      }
+
+      transactionHash = matchingTx.hash;
+      verificationResult = await this.blockchainService.verifyUSDTTransaction(
+        transactionHash,
+        order.paymentWallet,
+        order.receivingWallet,
+        order.totalPriceUSDT
+      );
+
+      if (!verificationResult.isValid) {
+        this.logger.warn(`❌ Verificación fallida para orden ${order.id}: ${verificationResult.error}`);
+        return;
+      }
+
+      await this.orderRepository.update(order.id, {
+        transactionHash,
+        blockNumber: matchingTx.blockNumber ? parseInt(matchingTx.blockNumber) : undefined,
+        paidAt: new Date(parseInt(matchingTx.timeStamp) * 1000),
+      });
+    } else {
+      verificationResult = await this.blockchainService.verifyUSDTTransaction(
+        transactionHash,
+        order.paymentWallet,
+        order.receivingWallet,
+        order.totalPriceUSDT
+      );
+
+      if (!verificationResult.isValid) {
+        this.logger.warn(`❌ Verificación fallida para orden ${order.id}: ${verificationResult.error}`);
+        return;
+      }
+    }
+
+    const confirmations = verificationResult.transaction
+      ? await this.getConfirmations(verificationResult.transaction.blockNumber)
+      : 0;
+
+    const updatePayload: Partial<Order> = {
+      confirmations,
+      transactionHash,
+      blockNumber: verificationResult.transaction?.blockNumber ?? order.blockNumber,
+      paidAt: order.paidAt ?? new Date(),
+    };
+
+    if (confirmations >= this.REQUIRED_CONFIRMATIONS) {
+      this.logger.log(`✅ Pago verificado para orden ${order.id}`);
+
+      await this.orderRepository.update(order.id, {
+        ...updatePayload,
+        status: 'paid',
+      });
+
+      await this.fulfillOrder(order.id);
+    } else {
+      this.logger.log(`⏳ Orden ${order.id} esperando confirmaciones: ${confirmations}/${this.REQUIRED_CONFIRMATIONS}`);
+
+      await this.orderRepository.update(order.id, {
+        ...updatePayload,
+        status: 'pending_confirmations',
       });
     }
   }
