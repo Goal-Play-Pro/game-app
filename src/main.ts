@@ -30,7 +30,8 @@ async function bootstrap() {
       });
     }
 
-    app.set('trust proxy', 1);
+    const expressInstance = app.getHttpAdapter().getInstance();
+    expressInstance.set('trust proxy', 1);
 
     // Security middleware
     const parseOrigin = (value?: string): string | undefined => {
