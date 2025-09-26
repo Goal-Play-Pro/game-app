@@ -67,6 +67,7 @@ export class AuthService {
     let nonce = '';
     let challenge: Challenge | null = null;
     let user: User | null = null;
+    let chainTypeFromMessage: string | undefined;
 
     try {
       const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
@@ -91,13 +92,15 @@ export class AuthService {
         throw new UnauthorizedException('Challenge not found or expired');
       }
 
+      chainTypeFromMessage = this.getChainType(parsedMessage.chainId);
+
       const isValid = await this.cryptoService.verifySiweSignature(message, signature, address);
       if (!isValid) {
         this.securityMetrics.recordLoginFailure({
           method: 'siwe',
           wallet: address,
           ip: requestContext?.ip,
-          chainType: this.getChainType(1),
+          chainType: chainTypeFromMessage,
         });
         throw new UnauthorizedException('Invalid signature');
       }
@@ -140,6 +143,8 @@ export class AuthService {
         throw new UnauthorizedException('Challenge not found or expired');
       }
 
+      const loginChainType = challenge.chainType ?? chainTypeFromMessage ?? this.getChainType(1);
+
       user = await this.userRepository.findOne({
         where: { walletAddress: address }
       });
@@ -147,7 +152,7 @@ export class AuthService {
       if (!user) {
         user = await this.userRepository.save({
           walletAddress: address,
-          chain: this.getChainType(1), // Default to ethereum
+          chain: loginChainType,
           isActive: true,
           lastLogin: new Date(),
           metadata: JSON.stringify({
@@ -157,17 +162,25 @@ export class AuthService {
             },
           }),
         });
+        user.chain = loginChainType;
       } else {
-        await this.userRepository.update(user.id, {
+        const updatePayload: Partial<User> = {
           lastLogin: new Date(),
           isActive: true,
-        });
+        };
+
+        if (user.chain !== loginChainType) {
+          updatePayload.chain = loginChainType;
+          user.chain = loginChainType;
+        }
+
+        await this.userRepository.update(user.id, updatePayload);
       }
 
       const payload = {
         sub: user.id,
         wallet: address,
-        chainType: user.chain,
+        chainType: loginChainType,
       };
 
       const token = this.jwtService.sign(payload);
@@ -175,7 +188,7 @@ export class AuthService {
       await this.logger.auditLog('auth.login.success', user.id, {
         method: 'siwe',
         wallet: address,
-        chainType: user.chain,
+        chainType: loginChainType,
         challengeId: challenge.id,
         nonce,
       });
@@ -184,7 +197,7 @@ export class AuthService {
         method: 'siwe',
         wallet: address,
         ip: requestContext?.ip,
-        chainType: user.chain,
+        chainType: loginChainType,
       });
 
       return {
@@ -206,7 +219,7 @@ export class AuthService {
         method: 'siwe',
         wallet: address !== 'unknown' ? address : undefined,
         ip: requestContext?.ip,
-        chainType: challenge?.chainType,
+        chainType: challenge?.chainType ?? chainTypeFromMessage,
       });
       throw error;
     }

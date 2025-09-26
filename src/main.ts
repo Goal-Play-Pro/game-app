@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
-import helmet from 'helmet';
+import helmet, { HelmetOptions } from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
@@ -19,12 +19,63 @@ async function bootstrap() {
 
     const configService = app.get(ConfigService);
     const port = configService.get('PORT', 3001);
+    const nodeEnv = configService.get('NODE_ENV', 'development');
+    const isProduction = nodeEnv === 'production';
+
+    if (isProduction) {
+      ['FRONTEND_URL', 'CORS_ORIGIN'].forEach((envKey) => {
+        if (!configService.get(envKey)) {
+          throw new Error(`${envKey} must be configured in production`);
+        }
+      });
+    }
+
+    app.set('trust proxy', 1);
 
     // Security middleware
-    app.use(helmet({
-      crossOriginEmbedderPolicy: false,
-      contentSecurityPolicy: false,
-    }));
+    const parseOrigin = (value?: string): string | undefined => {
+      if (!value) {
+        return undefined;
+      }
+      try {
+        const normalized = value.startsWith('http') ? value : `https://${value}`;
+        return new URL(normalized).origin;
+      } catch {
+        return undefined;
+      }
+    };
+
+    const frontendOrigin = parseOrigin(configService.get('FRONTEND_URL'));
+    const corsOrigin = parseOrigin(configService.get('CORS_ORIGIN'));
+
+    const cspDirectives = helmet.contentSecurityPolicy.getDefaultDirectives();
+    cspDirectives['default-src'] = ["'self'"];
+    cspDirectives['object-src'] = ["'none'"];
+    cspDirectives['img-src'] = ["'self'", 'data:', 'https://photos.pinksale.finance'];
+    cspDirectives['style-src'] = ["'self'", "'unsafe-inline'"];
+    cspDirectives['script-src'] = ["'self'"];
+
+    const connectSrc = new Set<string>(["'self'"]);
+    [frontendOrigin, corsOrigin].forEach((origin) => {
+      if (origin) {
+        connectSrc.add(origin);
+      }
+    });
+    cspDirectives['connect-src'] = Array.from(connectSrc);
+    cspDirectives['frame-ancestors'] = ["'self'"];
+
+    const helmetOptions: HelmetOptions = {
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: cspDirectives,
+      },
+    };
+
+    if (!isProduction) {
+      helmetOptions.crossOriginEmbedderPolicy = false;
+    }
+
+    app.use(helmet(helmetOptions));
     app.use(compression());
     app.use(cookieParser());
 
@@ -42,14 +93,19 @@ async function bootstrap() {
     );
 
     // CORS configuration
+    const corsOrigins = new Set<string>([
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:3001',
+    ]);
+    [frontendOrigin, corsOrigin].forEach((origin) => {
+      if (origin) {
+        corsOrigins.add(origin);
+      }
+    });
+
     app.enableCors({
-      origin: [
-        'http://localhost:3000',
-        'http://localhost:5173',
-        'http://localhost:3001',
-        configService.get('FRONTEND_URL', ''),
-        configService.get('CORS_ORIGIN', ''),
-      ].filter(Boolean),
+      origin: Array.from(corsOrigins),
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],

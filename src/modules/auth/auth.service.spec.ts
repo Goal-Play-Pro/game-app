@@ -128,6 +128,45 @@ describe('AuthService.verifySiweSignature', () => {
     );
   });
 
+  it('persists challenge chain type when creating a new SIWE user', async () => {
+    const bscNonce = 'noncebsc12345';
+    const bscExpiresAt = new Date(Date.now() + 120_000);
+    const bscMessage = (service as unknown as { buildSiweMessage: (...args: any[]) => string }).buildSiweMessage(
+      checksumAddress,
+      56,
+      'Sign in',
+      bscNonce,
+      bscExpiresAt,
+    );
+
+    const bscChallenge: Challenge = {
+      ...freshChallenge,
+      id: 'challenge-bsc',
+      nonce: bscNonce,
+      message: bscMessage,
+      chainType: 'bsc',
+      expiresAt: bscExpiresAt,
+    };
+
+    challenges.findOne.mockResolvedValue(bscChallenge);
+    challenges.update.mockResolvedValue({ affected: 1 } as UpdateResult);
+    users.findOne.mockResolvedValue(null);
+    users.save.mockResolvedValue({
+      id: 'user-bsc',
+      walletAddress: normalizedAddress,
+      chain: 'bsc',
+      isActive: true,
+    } as User);
+
+    await service.verifySiweSignature(bscMessage, '0xsignature');
+
+    expect(users.save).toHaveBeenCalledWith(expect.objectContaining({ chain: 'bsc' }));
+    expect(jwt.sign).toHaveBeenCalledWith(expect.objectContaining({ chainType: 'bsc' }));
+    expect(metrics.recordLoginSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'siwe', wallet: normalizedAddress, chainType: 'bsc' }),
+    );
+  });
+
   it('logs failures when signature verification fails', async () => {
     challenges.findOne.mockResolvedValue(freshChallenge);
     challenges.update.mockResolvedValue({ affected: 1 } as UpdateResult);

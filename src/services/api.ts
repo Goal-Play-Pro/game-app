@@ -172,12 +172,16 @@ const makeRequest = async <T = any>(
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
         }
-        
+
+        if (!API_CONFIG.ALLOW_FALLBACKS) {
+          throw error;
+        }
+
         // Todos los intentos fallaron, usar fallback silenciosamente
         console.log(`🔄 API ${API_CONFIG.BASE_URL}${endpoint} unavailable, using fallback data`);
         return getFallbackData(endpoint, method, data) as T;
       }
-      
+
       // Error no relacionado con conectividad, lanzar inmediatamente
       throw error;
     }
@@ -194,6 +198,10 @@ const delay = (ms: number): Promise<void> => {
 
 // Datos de fallback para cuando el backend no esté disponible
 const getFallbackData = (endpoint: string, method: string, data?: any): any => {
+  if (!API_CONFIG.ALLOW_FALLBACKS) {
+    throw new Error(`Fallback data disabled for endpoint ${endpoint}`);
+  }
+
   const cleanEndpoint = endpoint.replace(/^\//, '');
   
   // Log para debugging

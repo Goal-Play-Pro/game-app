@@ -36,11 +36,18 @@ const getEnvVar = (key: string, defaultValue: string = ''): string => {
   return defaultValue;
 };
 
+const getBooleanEnv = (key: string, defaultValue: boolean): boolean => {
+  const raw = getEnvVar(key, defaultValue ? 'true' : 'false');
+  return ['true', '1', 'yes', 'on'].includes(raw.toLowerCase());
+};
+
 const defaultFrontendUrl = typeof window !== 'undefined'
   ? window.location.origin
   : 'https://game.goalplay.pro';
 
 const frontendBaseUrl = getEnvVar('VITE_FRONTEND_URL', defaultFrontendUrl);
+const runtimeNodeEnv = getEnvVar('NODE_ENV', 'development').toLowerCase();
+const allowFallbacks = getBooleanEnv('VITE_ENABLE_API_FALLBACK', runtimeNodeEnv !== 'production');
 
 export const API_CONFIG = {
   // URL base de la API: por defecto usa el proxy /api del frontend
@@ -133,6 +140,7 @@ export const API_CONFIG = {
 
   // URL base del frontend para compartir links (puede apuntar a otro dominio distinto a la API)
   FRONTEND_URL: frontendBaseUrl,
+  ALLOW_FALLBACKS: allowFallbacks,
 };
 
 // Función para cambiar la URL base dinámicamente

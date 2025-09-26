@@ -9,6 +9,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { User } from '../../database/entities/user.entity';
 import { Challenge } from '../../database/entities/challenge.entity';
 import { SecurityMetricsController } from './security-metrics.controller';
+import { resolveJwtSecret } from '../../common/config/jwt.config';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { SecurityMetricsController } from './security-metrics.controller';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET', 'your-secret-key'),
+        secret: resolveJwtSecret(configService),
         signOptions: { expiresIn: '1h' },
       }),
     }),
