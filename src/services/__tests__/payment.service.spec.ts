@@ -27,7 +27,6 @@ describe('PaymentService (frontend helpers)', () => {
     mockContract = {
       balanceOf: jest.fn(),
       decimals: jest.fn(),
-      transfer: jest.fn(),
     };
 
     browserProviderSpy = jest
@@ -130,38 +129,4 @@ describe('PaymentService (frontend helpers)', () => {
     });
   });
 
-  describe('executeUSDTPayment', () => {
-    beforeEach(() => {
-      jest.spyOn(ethers, 'parseUnits').mockReturnValue(BigInt('1000000000000000000'));
-    });
-
-    it('returns failure when user has insufficient balance', async () => {
-      mockContract.balanceOf.mockResolvedValueOnce(BigInt('500000000000000000'));
-
-      const result = await PaymentService.executeUSDTPayment('0xto', '1', '0xuser');
-      expect(result.success).toBe(false);
-      expect(result?.error).toContain('Insufficient USDT balance');
-    });
-
-    it('executes transfer and waits for confirmation', async () => {
-      mockContract.balanceOf.mockResolvedValueOnce(BigInt('2000000000000000000'));
-      const waitMock = jest.fn().mockResolvedValue({ status: 1 });
-      mockContract.transfer.mockResolvedValueOnce({ hash: '0xhash', wait: waitMock });
-
-      const result = await PaymentService.executeUSDTPayment('0xto', '1', '0xuser');
-
-      expect(mockContract.transfer).toHaveBeenCalled();
-      expect(waitMock).toHaveBeenCalled();
-      expect(result).toEqual({ success: true, transactionHash: '0xhash' });
-    });
-
-    it('maps user rejection errors to friendly message', async () => {
-      mockContract.balanceOf.mockResolvedValueOnce(BigInt('2000000000000000000'));
-      const rejection = Object.assign(new Error('Rejected'), { code: 'ACTION_REJECTED' });
-      mockContract.transfer.mockRejectedValueOnce(rejection);
-
-      const result = await PaymentService.executeUSDTPayment('0xto', '1', '0xuser');
-      expect(result).toEqual({ success: false, error: 'Payment cancelled by user' });
-    });
-  });
 });

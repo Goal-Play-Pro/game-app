@@ -15,7 +15,7 @@ const ReferralLink = ({ referralLink, referralCode, className = '' }: ReferralLi
   const copyLink = async () => {
     // Usar utilidad robusta de copia
     const result = await shareContent({
-      title: 'Join Gol Play with my referral link!',
+      title: 'Join Goal Play with my referral link!',
       text: 'Start playing football games and earning rewards! 🚀⚽💰',
       url: referralLink
     }, {
@@ -40,7 +40,7 @@ const ReferralLink = ({ referralLink, referralCode, className = '' }: ReferralLi
   const shareLink = async () => {
     // Usar utilidad robusta de compartir
     const result = await shareContent({
-      title: 'Join Gol Play with my referral link!',
+      title: 'Join Goal Play with my referral link!',
       text: 'Start playing football games and earning rewards with blockchain technology! 🚀⚽💰',
       url: referralLink
     }, {
@@ -126,7 +126,7 @@ const ReferralLink = ({ referralLink, referralCode, className = '' }: ReferralLi
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(`🚀 Join me on Gol Play - The ultimate football gaming platform with blockchain rewards! ⚽💰`)}&url=${encodeURIComponent(referralLink)}`, '_blank')}
+          onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(`🚀 Join me on Goal Play - The ultimate football gaming platform with blockchain rewards! ⚽💰`)}&url=${encodeURIComponent(referralLink)}`, '_blank')}
           className="btn-secondary flex items-center justify-center space-x-2"
         >
           <ExternalLink className="w-4 h-4" />
@@ -143,7 +143,7 @@ const ReferralLink = ({ referralLink, referralCode, className = '' }: ReferralLi
           <li>• Share on social media (Twitter, Instagram, TikTok)</li>
           <li>• Send to friends who love football gaming</li>
           <li>• Post in gaming and crypto communities</li>
-          <li>• Create content about Gol Play with your link</li>
+          <li>• Create content about Goal Play with your link</li>
         </ul>
       </div>
     </div>

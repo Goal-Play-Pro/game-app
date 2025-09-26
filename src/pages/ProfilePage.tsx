@@ -54,7 +54,7 @@ const ProfilePage = () => {
   const [currentUser, setCurrentUser] = useState({
     id: '1',
     username: 'golplayer',
-    displayName: 'Gol Player',
+    displayName: 'Goal Player',
     avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=300',
     banner: 'https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg?auto=compress&cs=tinysrgb&w=1200',
     bio: 'Passionate football gamer and NFT collector. Master of penalty shootouts.',
@@ -231,7 +231,7 @@ const ProfilePage = () => {
   const shareProfile = () => {
     // Usar utilidad robusta de compartir
     shareContent({
-      title: `${currentUser.displayName} - Gol Play Profile`,
+      title: `${currentUser.displayName} - Goal Play Profile`,
       text: currentUser.bio,
       url: window.location.href
     }, {
@@ -250,7 +250,7 @@ const ProfilePage = () => {
   const copyToClipboard = () => {
     // Usar utilidad robusta de copia
     shareContent({
-      title: `${currentUser.displayName} - Gol Play Profile`,
+      title: `${currentUser.displayName} - Goal Play Profile`,
       text: currentUser.bio,
       url: window.location.href
     }, {
@@ -784,8 +784,8 @@ const ProfilePage = () => {
                           onClick={() => {
                             if (navigator.share) {
                               navigator.share({
-                                title: 'Join Gol Play!',
-                                text: '🚀 Join me on Gol Play and earn rewards playing football! ⚽💰',
+                                title: 'Join Goal Play!',
+                                text: '🚀 Join me on Goal Play and earn rewards playing football! ⚽💰',
                                 url: referralStats?.referralLink || `${API_CONFIG.FRONTEND_URL}?ref=${referralCode.code}`
                               });
                             }
@@ -796,7 +796,7 @@ const ProfilePage = () => {
                           <span>Share</span>
                         </button>
                         <button
-                          onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent('🚀 Join me on Gol Play - The ultimate football gaming platform! ⚽💰')}&url=${encodeURIComponent(referralStats?.referralLink || `${API_CONFIG.FRONTEND_URL}?ref=${referralCode.code}`)}`, '_blank')}
+                          onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent('🚀 Join me on Goal Play - The ultimate football gaming platform! ⚽💰')}&url=${encodeURIComponent(referralStats?.referralLink || `${API_CONFIG.FRONTEND_URL}?ref=${referralCode.code}`)}`, '_blank')}
                           className="btn-secondary flex items-center justify-center space-x-2"
                         >
                           <ExternalLink className="w-4 h-4" />

@@ -14,6 +14,7 @@ import {
 import { usePayment } from '../../hooks/usePayment';
 import { useWallet } from '../../hooks/useWallet';
 import LoadingSpinner from '../common/LoadingSpinner';
+import { PAYMENT_CONFIG } from '../../config/payment.config';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
   const [usdtBalance, setUsdtBalance] = useState<string>('0.00');
   const [gasEstimate, setGasEstimate] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
+  const gatewayContract = PAYMENT_CONFIG.PAYMENT_GATEWAY_CONTRACT;
 
   const { address, isConnected, connectWallet } = useWallet();
   const {
@@ -412,6 +414,34 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                       MetaMask will request one or two confirmations: a token approval (if needed) followed by the payment transaction. Review each prompt carefully before accepting.
                     </p>
                   </div>
+
+                  {gatewayContract && (
+                    <div className="glass rounded-lg p-4">
+                      <div className="text-sm text-gray-400 mb-2">Payment Gateway Contract</div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-white font-mono text-sm">
+                          {gatewayContract.slice(0, 10)}...{gatewayContract.slice(-8)}
+                        </span>
+                        <button
+                          onClick={() => copyAddress(gatewayContract)}
+                          className="p-1 text-gray-400 hover:text-white transition-colors"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <a
+                          href={`https://bscscan.com/address/${gatewayContract}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1 text-gray-400 hover:text-white transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+                      <p className="mt-3 text-xs text-gray-500 text-left">
+                        Funds route through this gateway contract. Review it on BscScan before approving to ensure it matches the address announced by Goal Play.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Payment Button */}
                   <button

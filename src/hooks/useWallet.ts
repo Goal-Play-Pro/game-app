@@ -297,15 +297,6 @@ export const useWallet = () => {
     ethereum.on?.('accountsChanged', handleAccountsChanged);
     ethereum.on?.('chainChanged', handleChainChanged);
 
-    // Check if previously connected
-    const wasConnected = localStorage.getItem('walletConnected');
-    const savedAddress = localStorage.getItem('walletAddress');
-    const savedChainId = localStorage.getItem('walletChainId');
-    
-    if (wasConnected === 'true' || (savedAddress && savedChainId)) {
-      checkConnection();
-    }
-
     return () => {
       if (ethereum) {
         ethereum.removeListener?.('accountsChanged', handleAccountsChanged);

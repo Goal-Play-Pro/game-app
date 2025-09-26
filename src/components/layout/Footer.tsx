@@ -186,7 +186,7 @@ const Footer = () => {
             <Link to="/" className="flex items-center space-x-2 sm:space-x-3">
               <img
                 src="https://photos.pinksale.finance/file/pinksale-logo-upload/1756173488726-1bb87d41d15fe27b500a4bfcde01bb0e.png"
-                alt="Gol Play Logo"
+                alt="Goal Play Logo"
                 className="h-6 sm:h-8 w-auto object-contain"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
@@ -198,11 +198,11 @@ const Footer = () => {
                 <span className="text-white font-bold text-sm sm:text-lg">G</span>
               </div>
               <span className="font-display font-bold text-lg sm:text-xl gradient-text">
-                Gol Play
+                Goal Play
               </span>
             </Link>
             <span className="text-gray-400 text-xs sm:text-sm text-center sm:text-left">
-              © 2024 Gol Play. All rights reserved.
+              © 2024 Goal Play. All rights reserved.
             </span>
           </div>
 

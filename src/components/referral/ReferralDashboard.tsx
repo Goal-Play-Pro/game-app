@@ -116,7 +116,7 @@ const ReferralDashboard = () => {
     if (referralStats?.referralLink) {
       // Usar utilidad robusta de compartir
       const result = await shareContent({
-        title: 'Join Gol Play with my referral link!',
+        title: 'Join Goal Play with my referral link!',
         text: 'Start playing football games and earning rewards with blockchain technology!',
         url: referralStats.referralLink
       }, {
