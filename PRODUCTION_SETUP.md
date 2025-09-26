@@ -76,13 +76,13 @@ JWT_SECRET=tu-secreto-super-seguro-para-produccion
 ### **3. Iniciar Aplicación:**
 ```bash
 # Instalar dependencias
-npm install
+pnpm install
 
 # Iniciar backend (crea tablas automáticamente)
-npm run start:backend:dev
+pnpm run start:backend:dev
 
 # Iniciar frontend
-npm run dev
+pnpm run dev
 ```
 
 ---
@@ -175,28 +175,28 @@ INSERT INTO ledger_entries VALUES
 ### **Desarrollo:**
 ```bash
 # Backend
-npm run start:backend:dev
+pnpm run start:backend:dev
 
 # Frontend
-npm run dev
+pnpm run dev
 ```
 
 ### **Producción:**
 ```bash
 # Build
-npm run build:all
+pnpm run build:all
 
 # Start
-npm run start:prod
+pnpm run start:prod
 ```
 
 ### **Testing:**
 ```bash
 # Unit tests
-npm run test
+pnpm run test
 
 # E2E tests
-npm run test:e2e
+pnpm run test:e2e
 ```
 
 ---

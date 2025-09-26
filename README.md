@@ -26,7 +26,7 @@ A comprehensive football gaming platform featuring wallet authentication, on-cha
 ### Installation
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### Environment Setup
@@ -56,10 +56,10 @@ createdb goalplay
 
 ```bash
 # Start backend
-npm run start:backend:dev
+pnpm run start:backend:dev
 
 # Start frontend (in another terminal)
-npm run dev
+pnpm run dev
 ```
 
 The API will be available at `http://localhost:3001` with Swagger documentation at `http://localhost:3001/api/docs`.
@@ -154,14 +154,14 @@ The application uses PostgreSQL with TypeORM for production-ready data persisten
 ### Code Quality
 
 ```bash
-npm run lint             # ESLint
+pnpm run lint             # ESLint
 ```
 
 ### Building for Production
 
 ```bash
-npm run build:all
-npm run start:prod
+pnpm run build:all
+pnpm run start:prod
 ```
 
 ## Data Models

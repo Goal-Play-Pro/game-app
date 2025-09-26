@@ -10,7 +10,7 @@
 
 ### **🗄️ Base de Datos:**
 - [ ] Supabase proyecto creado
-- [ ] Migraciones ejecutadas (`npm run migrate:json-to-db`)
+- [ ] Migraciones ejecutadas (`pnpm run migrate:json-to-db`)
 - [ ] Credenciales de Supabase obtenidas
 - [ ] RLS políticas configuradas
 

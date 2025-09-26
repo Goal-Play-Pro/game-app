@@ -22,13 +22,13 @@ git add .
 git commit -m "🚀 Goal Play - Ready for Digital Ocean deployment"
 
 # Crear repositorio en GitHub y subir:
-git remote add origin https://github.com/TU-USUARIO/gol-play.git
+git remote add origin https://github.com/TU-USUARIO/goal-play.git
 git push -u origin main
 ```
 
 ### **1.2 Verificar estructura del proyecto:**
 ```
-gol-play/
+goal-play/
 ├── .do/
 │   └── app.yaml              # ← Configuración de Digital Ocean
 ├── src/                      # Código fuente
@@ -46,7 +46,7 @@ gol-play/
 1. **Conectar a Supabase** (botón en esquina superior derecha)
 2. **Ejecutar migraciones:**
    ```bash
-   npm run migrate:json-to-db
+   pnpm run migrate:json-to-db
    ```
 3. **Obtener credenciales** de Supabase Dashboard
 
@@ -106,13 +106,13 @@ CORS_ORIGIN=${frontend.PUBLIC_URL}
 #### **Backend Service:**
 - **Tipo:** Web Service
 - **Puerto:** 3001
-- **Comando Build:** `npm ci && npm run build:backend`
-- **Comando Start:** `npm run start:backend:prod`
+- **Comando Build:** `pnpm install --frozen-lockfile && pnpm run build:backend`
+- **Comando Start:** `pnpm run start:backend:prod`
 - **Instancia:** Basic ($5/mes)
 
 #### **Frontend Service:**
 - **Tipo:** Static Site
-- **Comando Build:** `npm ci && npm run build:frontend`
+- **Comando Build:** `pnpm install --frozen-lockfile && pnpm run build:frontend`
 - **Directorio Output:** `dist/`
 - **Instancia:** Basic ($3/mes)
 
@@ -135,7 +135,7 @@ Docs:     https://api.goalplay.app/api/docs
     "build:backend": "nest build",
     "build:frontend": "vite build",
     "start:backend:prod": "node dist/backend/main.js",
-    "start:prod": "npm run start:backend:prod"
+    "start:prod": "pnpm run start:backend:prod"
   }
 }
 ```
@@ -223,10 +223,10 @@ CORS_ORIGIN=https://tu-dominio-frontend.com,https://goalplay.app
 ### **9.1 URLs Finales:**
 ```bash
 # Después del despliegue tendrás:
-Frontend: https://gol-play-frontend-xxxxx.ondigitalocean.app
-Backend:  https://gol-play-backend-xxxxx.ondigitalocean.app
-API Docs: https://gol-play-backend-xxxxx.ondigitalocean.app/api/docs
-Health:   https://gol-play-backend-xxxxx.ondigitalocean.app/health
+Frontend: https://goal-play-frontend-xxxxx.ondigitalocean.app
+Backend:  https://goal-play-backend-xxxxx.ondigitalocean.app
+API Docs: https://goal-play-backend-xxxxx.ondigitalocean.app/api/docs
+Health:   https://goal-play-backend-xxxxx.ondigitalocean.app/health
 ```
 
 ### **9.2 Tests de Verificación:**

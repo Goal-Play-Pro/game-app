@@ -1,6 +1,9 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+
+const projectRoot = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
@@ -21,7 +24,7 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        rewrite: (path) => path.replace(/^\/api/, ''),
       }
     }
   },
@@ -31,7 +34,7 @@ export default defineConfig(({ mode }) => ({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': resolve(projectRoot, 'src'),
     },
   },
   esbuild: {
@@ -44,7 +47,7 @@ export default defineConfig(({ mode }) => ({
     sourcemap: true,
     rollupOptions: {
       input: {
-        main: path.resolve(__dirname, 'index.html')
+        main: resolve(projectRoot, 'index.html')
       },
       output: {
         manualChunks: {
