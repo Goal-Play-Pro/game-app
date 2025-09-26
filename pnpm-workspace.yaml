@@ -1,7 +1,0 @@
-onlyBuiltDependencies:
-  - '@nestjs/core'
-  - '@scarf/scarf'
-  - bufferutil
-  - esbuild
-  - sqlite3
-  - utf-8-validate

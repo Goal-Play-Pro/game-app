@@ -52,3 +52,5 @@ lerna-debug.log*
 
 # dev db
 data/
+
+pnpm-workspace.yaml
