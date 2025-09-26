@@ -155,7 +155,7 @@ const makeRequest = async <T = any>(
       }
       
       console.log(`✅ API Success: ${method} ${API_CONFIG.BASE_URL}${endpoint} → ${response.status}`);
-      
+
       return response.data;
     } catch (error: any) {
       lastError = error;
@@ -172,6 +172,11 @@ const makeRequest = async <T = any>(
         error.response?.status >= 500
       );
       
+      const status = error?.response?.status;
+      if (status && status >= 400 && status < 500) {
+        console.debug(`⚠️ API ${method} ${endpoint} responded with ${status}`);
+      }
+
       if (isConnectivityError) {
         if (attempt < maxRetries) {
           // Esperar 1 segundo antes del siguiente intento
