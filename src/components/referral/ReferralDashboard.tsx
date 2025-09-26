@@ -16,7 +16,7 @@ import ApiService from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ReferralLink from './ReferralLink';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
-
+import { logWalletRequirement } from '../../utils/wallet.utils';
 import { shareContent } from '../../utils/share.utils';
 
 const ReferralDashboard = () => {
@@ -24,25 +24,22 @@ const ReferralDashboard = () => {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStatus();
 
-  // Debug: Log authentication status
-  console.log('🔐 ReferralDashboard - Auth Status:', isAuthenticated);
-  console.log('🔐 Wallet Address:', localStorage.getItem('walletAddress'));
-  console.log('🔐 Wallet Connected:', localStorage.getItem('walletConnected'));
-  console.log('🔗 Production API URL:', API_CONFIG.BASE_URL);
+  const walletConnected = typeof window !== 'undefined' && localStorage.getItem('walletConnected') === 'true';
+  const walletAddress = typeof window !== 'undefined' ? localStorage.getItem('walletAddress') : null;
 
   // Fetch referral stats
   const { data: referralStats, isLoading: statsLoading, error: statsError } = useQuery({
     queryKey: ['referral-stats'],
     queryFn: () => ApiService.getReferralStats(),
-    enabled: true, // Always try to fetch, let the service handle auth
-    retry: false,
+    enabled: isAuthenticated && walletConnected && !!walletAddress,
+    retry: isAuthenticated && walletConnected ? 1 : false,
   });
 
   const { data: referralCode, isLoading: codeLoading } = useQuery({
     queryKey: ['my-referral-code'],
     queryFn: () => ApiService.getMyReferralCode(),
-    enabled: true, // Always try to fetch, let the service handle auth
-    retry: false,
+    enabled: isAuthenticated && walletConnected && !!walletAddress,
+    retry: isAuthenticated && walletConnected ? 1 : false,
   });
 
   // Create referral code mutation
@@ -135,10 +132,8 @@ const ReferralDashboard = () => {
   };
 
   // Check if we have wallet connection instead of just auth status
-  const walletConnected = localStorage.getItem('walletConnected') === 'true';
-  const walletAddress = localStorage.getItem('walletAddress');
-  
   if (!walletConnected || !walletAddress) {
+    logWalletRequirement('Referral dashboard');
     return (
       <div className="glass-dark rounded-xl p-8 text-center">
         <div className="w-16 h-16 bg-gradient-to-r from-football-green to-football-blue rounded-full flex items-center justify-center mx-auto mb-6">

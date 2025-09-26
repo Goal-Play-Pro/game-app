@@ -14,15 +14,42 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ApiService from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { ChainType } from '../../types';
+import { useAuthStatus } from '../../hooks/useAuthStatus';
+import { logWalletRequirement } from '../../utils/wallet.utils';
+
+const getWalletPersistence = () => {
+  if (typeof window === 'undefined') {
+    return {
+      connected: false,
+      address: null as string | null,
+    };
+  }
+
+  try {
+    return {
+      connected: localStorage.getItem('walletConnected') === 'true',
+      address: localStorage.getItem('walletAddress'),
+    };
+  } catch {
+    return {
+      connected: false,
+      address: null,
+    };
+  }
+};
 
 const WalletManager = () => {
   const [isLinking, setIsLinking] = useState(false);
   const queryClient = useQueryClient();
+  const isAuthenticated = useAuthStatus();
+  const { connected: walletConnected, address: walletAddress } = getWalletPersistence();
 
   // Fetch user wallets
   const { data: wallets, isLoading: walletsLoading } = useQuery({
     queryKey: ['user-wallets'],
     queryFn: ApiService.getAllUserWallets,
+    enabled: isAuthenticated && walletConnected,
+    retry: isAuthenticated && walletConnected ? 1 : false,
   });
 
   // Set primary wallet mutation
@@ -81,6 +108,20 @@ const WalletManager = () => {
       window.open(`${explorer}/address/${address}`, '_blank');
     }
   };
+
+  if (!isAuthenticated || !walletConnected || !walletAddress) {
+    logWalletRequirement('Wallet manager');
+    return (
+      <div className="glass-dark rounded-xl p-6">
+        <div className="flex flex-col items-center justify-center py-12 space-y-3">
+          <Wallet className="w-12 h-12 text-gray-500" />
+          <p className="text-gray-400 text-center">
+            Connect and authenticate your wallet to manage linked addresses.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (walletsLoading) {
     return (

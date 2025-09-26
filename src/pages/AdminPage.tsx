@@ -15,9 +15,17 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { API_CONFIG } from '../config/api.config';
+import { useAuthStatus } from '../hooks/useAuthStatus';
+import { logWalletRequirement } from '../utils/wallet.utils';
 
 const AdminPage = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'security' | 'analytics'>('overview');
+  const isAuthenticated = useAuthStatus();
+  const walletConnected = typeof window !== 'undefined' && localStorage.getItem('walletConnected') === 'true';
+
+  if (!isAuthenticated || !walletConnected) {
+    logWalletRequirement('Admin dashboard');
+  }
 
   // Fetch admin data
   const { data: revenueReport, isLoading: revenueLoading, refetch: refetchRevenue } = useQuery({
@@ -31,7 +39,8 @@ const AdminPage = () => {
       });
       return response.json();
     },
-    refetchInterval: 60000, // Refresh every minute
+    enabled: isAuthenticated && walletConnected,
+    refetchInterval: isAuthenticated && walletConnected ? 60000 : false,
   });
 
   const { data: monitoringReport, isLoading: monitoringLoading, refetch: refetchMonitoring } = useQuery({
@@ -45,7 +54,8 @@ const AdminPage = () => {
       });
       return response.json();
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: isAuthenticated && walletConnected,
+    refetchInterval: isAuthenticated && walletConnected ? 30000 : false,
   });
 
   const { data: networkStats, isLoading: networkLoading } = useQuery({
@@ -59,8 +69,25 @@ const AdminPage = () => {
       });
       return response.json();
     },
-    refetchInterval: 60000,
+    enabled: isAuthenticated && walletConnected,
+    refetchInterval: isAuthenticated && walletConnected ? 60000 : false,
   });
+
+  if (!isAuthenticated || !walletConnected) {
+    return (
+      <div className="pt-24 pb-20">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="glass-dark rounded-xl p-10 text-center space-y-4">
+            <Shield className="w-12 h-12 text-gray-500 mx-auto" />
+            <h2 className="text-2xl font-display text-white">Admin access requires a connected wallet</h2>
+            <p className="text-gray-400">
+              Connect and authenticate your wallet with admin privileges to view blockchain monitoring and revenue data.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
