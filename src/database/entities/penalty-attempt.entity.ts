@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 import { PenaltySession } from './penalty-session.entity';
 
 @Entity('penalty_attempts')
@@ -36,7 +37,7 @@ export class PenaltyAttempt {
   @Column()
   isGoal: boolean;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime' })
   attemptedAt: Date;
 
   @Column()

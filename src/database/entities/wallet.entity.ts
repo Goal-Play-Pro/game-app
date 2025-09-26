@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 import { User } from './user.entity';
 
 @Entity('wallets')
@@ -21,10 +22,10 @@ export class Wallet {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime' })
   linkedAt: Date;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime', nullable: true })
   lastUsedAt: Date;
 
   @CreateDateColumn()

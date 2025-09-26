@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { SeedService } from './database/seed/seed.service';
 
@@ -25,6 +26,7 @@ async function bootstrap() {
       contentSecurityPolicy: false,
     }));
     app.use(compression());
+    app.use(cookieParser());
 
     // Global configuration
     app.useGlobalPipes(

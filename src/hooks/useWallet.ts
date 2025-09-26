@@ -69,18 +69,6 @@ export const useWallet = () => {
     localStorage.removeItem('walletChainId');
   };
 
-  const storeAuthToken = (token: string) => {
-    localStorage.setItem(API_CONFIG.AUTH.TOKEN_KEY, token);
-    localStorage.setItem('authToken', token);
-  };
-
-  const removeAuthToken = () => {
-    localStorage.removeItem(API_CONFIG.AUTH.TOKEN_KEY);
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('jwt_token');
-    localStorage.removeItem('accessToken');
-  };
-
   const authenticateWallet = useCallback(async (address: string, chainIdNumber: number) => {
     const ethereum = (window as any).ethereum;
     if (!ethereum) {
@@ -105,13 +93,13 @@ export const useWallet = () => {
       }
 
       const authResponse = await ApiService.verifySiweSignature(message, signature);
-      storeAuthToken(authResponse.accessToken);
+      ApiService.markSessionActive(true);
       console.log('✅ Wallet authenticated via SIWE');
 
       await registerPendingReferral();
       return authResponse;
     } catch (error) {
-      removeAuthToken();
+      ApiService.markSessionActive(false);
       throw error;
     }
   }, [registerPendingReferral]);
@@ -124,7 +112,8 @@ export const useWallet = () => {
       const accounts = await ethereum.request({ method: 'eth_accounts' });
       if (accounts.length === 0) {
         clearWalletPersistence();
-        removeAuthToken();
+        ApiService.logout().catch(() => {});
+        ApiService.markSessionActive(false);
         setWalletState({
           isConnected: false,
           address: null,
@@ -150,13 +139,16 @@ export const useWallet = () => {
 
       persistWalletConnection(accounts[0], chainIdNumber);
 
-      if (!ApiService.isAuthenticated()) {
+      const hasSession = await ApiService.ensureSession();
+
+      if (!hasSession) {
         try {
           await authenticateWallet(accounts[0], chainIdNumber);
         } catch (error: any) {
           console.error('❌ Wallet authentication failed during auto-connect:', error);
           clearWalletPersistence();
-          removeAuthToken();
+          ApiService.logout().catch(() => {});
+          ApiService.markSessionActive(false);
           setWalletState({
             isConnected: false,
             address: null,
@@ -234,6 +226,8 @@ export const useWallet = () => {
       } catch (authError: any) {
         console.error('❌ Wallet authentication failed:', authError);
         clearWalletPersistence();
+        ApiService.logout().catch(() => {});
+        ApiService.markSessionActive(false);
         setWalletState({
           isConnected: false,
           address: null,
@@ -255,6 +249,8 @@ export const useWallet = () => {
   };
 
   const disconnectWallet = () => {
+    ApiService.logout().catch(() => {});
+    ApiService.markSessionActive(false);
     setWalletState({
       isConnected: false,
       address: null,
@@ -265,7 +261,6 @@ export const useWallet = () => {
     });
 
     clearWalletPersistence();
-    removeAuthToken();
     
     console.log('🔌 Wallet disconnected');
   };
@@ -320,7 +315,8 @@ export const useWallet = () => {
       } catch (error: any) {
         console.error('❌ Wallet authentication failed after account change:', error);
         clearWalletPersistence();
-        removeAuthToken();
+        ApiService.logout().catch(() => {});
+        ApiService.markSessionActive(false);
         setWalletState({
           isConnected: false,
           address: null,

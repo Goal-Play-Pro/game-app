@@ -1,12 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
 describe('Authentication (e2e)', () => {
   let app: INestApplication;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -24,11 +24,11 @@ describe('Authentication (e2e)', () => {
       return request(app.getHttpServer())
         .post('/auth/siwe/challenge')
         .send({
-          address: '0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000',
+          address: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
           chainId: 1,
           statement: 'Sign in to Football Gaming Platform',
         })
-        .expect(200)
+        .expect(201)
         .expect((res) => {
           expect(res.body).toHaveProperty('nonce');
           expect(res.body).toHaveProperty('expiresAt');
@@ -42,10 +42,10 @@ describe('Authentication (e2e)', () => {
       return request(app.getHttpServer())
         .post('/auth/solana/challenge')
         .send({
-          publicKey: '11111111111111111111111111111112',
+          publicKey: '11111111111111111111111111111111',
           statement: 'Sign in to Football Gaming Platform',
         })
-        .expect(200)
+        .expect(201)
         .expect((res) => {
           expect(res.body).toHaveProperty('nonce');
           expect(res.body).toHaveProperty('expiresAt');

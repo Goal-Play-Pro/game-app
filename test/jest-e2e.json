@@ -6,7 +6,7 @@
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
-  "moduleNameMapping": {
+  "moduleNameMapper": {
     "^@common/(.*)$": "<rootDir>/../src/common/$1",
     "^@auth/(.*)$": "<rootDir>/../src/modules/auth/$1",
     "^@wallet/(.*)$": "<rootDir>/../src/modules/wallet/$1",

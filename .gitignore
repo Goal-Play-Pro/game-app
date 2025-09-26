@@ -49,3 +49,6 @@ lerna-debug.log*
 
 # Temporary files
 /tmp
+
+# dev db
+data/

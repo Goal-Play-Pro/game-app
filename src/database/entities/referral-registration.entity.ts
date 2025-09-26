@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from './user.entity';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 import { ReferralCode } from './referral-code.entity';
 
 @Entity('referral_registrations')
@@ -22,7 +23,7 @@ export class ReferralRegistration {
   @Column()
   referralCode: string;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime' })
   registeredAt: Date;
 
   @Column({ default: true })

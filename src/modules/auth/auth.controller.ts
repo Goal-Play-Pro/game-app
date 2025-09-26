@@ -1,13 +1,21 @@
-import { Controller, Post, Body, HttpStatus, Get, Put, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, HttpStatus, Get, Put, UseGuards, Request, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CreateSiweChallenge, VerifySiweSignature, CreateSolanaChallenge, VerifySolanaSignature } from './dto/auth.dto';
+import { Response } from 'express';
+import { AUTH_COOKIE_NAME } from './auth.constants';
+import { LoggerService } from '../../common/services/logger.service';
+import { SecurityMetricsService } from '../../common/services/security-metrics.service';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly logger: LoggerService,
+    private readonly metrics: SecurityMetricsService,
+  ) {}
 
   @Post('siwe/challenge')
   @ApiOperation({ summary: 'Create SIWE challenge for Ethereum authentication' })
@@ -19,8 +27,14 @@ export class AuthController {
   @Post('siwe/verify')
   @ApiOperation({ summary: 'Verify SIWE signature and authenticate user' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Authentication successful' })
-  async verifySiweSignature(@Body() dto: VerifySiweSignature) {
-    return this.authService.verifySiweSignature(dto.message, dto.signature);
+  async verifySiweSignature(@Body() dto: VerifySiweSignature, @Request() req: any, @Res({ passthrough: true }) res: Response) {
+    const result = await this.authService.verifySiweSignature(dto.message, dto.signature, { ip: req.ip });
+    this.setAuthCookie(res, result.token, result.expiresInMs);
+    return {
+      userId: result.userId,
+      primaryWallet: result.primaryWallet,
+      expiresInMs: result.expiresInMs,
+    };
   }
 
   @Post('solana/challenge')
@@ -33,8 +47,33 @@ export class AuthController {
   @Post('solana/verify')
   @ApiOperation({ summary: 'Verify Solana signature and authenticate user' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Authentication successful' })
-  async verifySolanaSignature(@Body() dto: VerifySolanaSignature) {
-    return this.authService.verifySolanaSignature(dto.message, dto.signature, dto.publicKey);
+  async verifySolanaSignature(@Body() dto: VerifySolanaSignature, @Request() req: any, @Res({ passthrough: true }) res: Response) {
+    const result = await this.authService.verifySolanaSignature(dto.message, dto.signature, dto.publicKey, { ip: req.ip });
+    this.setAuthCookie(res, result.token, result.expiresInMs);
+    return {
+      userId: result.userId,
+      primaryWallet: result.primaryWallet,
+      expiresInMs: result.expiresInMs,
+    };
+  }
+
+  @Post('logout')
+  @ApiOperation({ summary: 'Clear authentication session' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Session terminated' })
+  async logout(@Request() req: any, @Res({ passthrough: true }) res: Response) {
+    this.clearAuthCookie(res);
+    await this.logger.auditLog('auth.logout', req.user?.sub ?? 'anonymous', {
+      wallet: req.user?.wallet,
+      chainType: req.user?.chainType,
+      ip: req.ip,
+    });
+    this.metrics.recordLogout({
+      method: req.user?.chainType === 'solana' ? 'solana' : 'siwe',
+      wallet: req.user?.wallet,
+      chainType: req.user?.chainType,
+      ip: req.ip,
+    });
+    return { success: true };
   }
 
   @Get('profile')
@@ -51,5 +90,24 @@ export class AuthController {
   @ApiResponse({ status: HttpStatus.OK, description: 'User profile updated successfully' })
   async updateUserProfile(@Request() req: any, @Body() profileData: any) {
     return this.authService.updateUserProfile(req.user.sub, profileData);
+  }
+
+  private setAuthCookie(res: Response, token: string, maxAge: number) {
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge,
+      path: '/',
+    });
+  }
+
+  private clearAuthCookie(res: Response) {
+    res.clearCookie(AUTH_COOKIE_NAME, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+    });
   }
 }

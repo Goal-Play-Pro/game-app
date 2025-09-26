@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import { API_CONFIG } from '../config/api.config';
 
 const AdminPage = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'security' | 'analytics'>('overview');
@@ -25,8 +26,8 @@ const AdminPage = () => {
       const response = await fetch(`${API_CONFIG.BASE_URL}/blockchain/revenue-report?days=30`, {
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
         },
+        credentials: 'include',
       });
       return response.json();
     },
@@ -39,8 +40,8 @@ const AdminPage = () => {
       const response = await fetch(`${API_CONFIG.BASE_URL}/blockchain/monitoring-report`, {
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
         },
+        credentials: 'include',
       });
       return response.json();
     },
@@ -53,8 +54,8 @@ const AdminPage = () => {
       const response = await fetch(`${API_CONFIG.BASE_URL}/blockchain/network-stats`, {
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`,
         },
+        credentials: 'include',
       });
       return response.json();
     },

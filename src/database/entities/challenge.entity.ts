@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 
 @Entity('challenges')
 export class Challenge {
@@ -17,7 +18,7 @@ export class Challenge {
   @Column({ type: 'text' })
   message: string;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime' })
   expiresAt: Date;
 
   @Column({ default: false })

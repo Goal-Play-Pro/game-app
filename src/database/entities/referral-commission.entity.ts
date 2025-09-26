@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateCol
 import { User } from './user.entity';
 import { Order } from './order.entity';
 import { ReferralCode } from './referral-code.entity';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 
 @Entity('referral_commissions')
 export class ReferralCommission {
@@ -38,7 +39,7 @@ export class ReferralCommission {
   @Column({ default: 'pending' })
   status: string;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime', nullable: true })
   paidAt: Date;
 
   @CreateDateColumn()

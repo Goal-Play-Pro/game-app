@@ -2,47 +2,30 @@ import { useEffect, useState } from 'react';
 import ApiService from '../services/api';
 
 export const useAuthStatus = (): boolean => {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return ApiService.isAuthenticated();
-  });
+  const [authenticated, setAuthenticated] = useState(() => ApiService.isAuthenticated());
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
+    let mounted = true;
 
-    const syncStatus = () => {
-      const tokenExists = ApiService.isAuthenticated();
-
-      const newAuthStatus = tokenExists;
-
-      if (newAuthStatus !== isAuthenticated) {
-        console.log(`🔐 Auth status changed: ${newAuthStatus ? 'AUTHENTICATED' : 'NOT AUTHENTICATED'}`);
-      }
-      
-      setIsAuthenticated(newAuthStatus);
+    const syncStatus = async () => {
+      const hasSession = ApiService.isAuthenticated() || (await ApiService.ensureSession());
+      if (!mounted) return;
+      setAuthenticated((prev) => {
+        if (prev !== hasSession) {
+          console.log(`🔐 Auth status changed: ${hasSession ? 'AUTHENTICATED' : 'NOT AUTHENTICATED'}`);
+        }
+        return hasSession;
+      });
     };
 
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === 'authToken' ||
-          event.key === 'jwt_token' ||
-          event.key === 'accessToken') {
-        syncStatus();
-      }
-    };
-
-    // Sync inmediatamente
     syncStatus();
-
-    window.addEventListener('storage', handleStorage);
-    const interval = window.setInterval(syncStatus, 1500);
+    const interval = window.setInterval(syncStatus, 60000);
 
     return () => {
-      window.removeEventListener('storage', handleStorage);
+      mounted = false;
       window.clearInterval(interval);
     };
-  }, [isAuthenticated]);
+  }, []);
 
-  return isAuthenticated;
+  return authenticated;
 };

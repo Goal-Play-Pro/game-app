@@ -5,6 +5,7 @@ import { OwnedPlayer } from './owned-player.entity';
 import { PenaltySession } from './penalty-session.entity';
 import { LedgerEntry } from './ledger-entry.entity';
 import { ReferralCode } from './referral-code.entity';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 
 @Entity('users')
 export class User {
@@ -20,7 +21,7 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime', nullable: true })
   lastLogin: Date;
 
   @Column({ type: 'text', nullable: true })

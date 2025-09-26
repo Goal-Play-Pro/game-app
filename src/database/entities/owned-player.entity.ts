@@ -5,6 +5,7 @@ import { Order } from './order.entity';
 import { GachaDraw } from './gacha-draw.entity';
 import { PlayerKit } from './player-kit.entity';
 import { PenaltySession } from './penalty-session.entity';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 
 @Entity('owned_players')
 export class OwnedPlayer {
@@ -23,7 +24,7 @@ export class OwnedPlayer {
   @Column({ nullable: true })
   sourceDrawId: string;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime' })
   acquiredAt: Date;
 
   @Column({ default: 1 })

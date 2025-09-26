@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 import { User } from './user.entity';
 import { ProductVariant } from './product-variant.entity';
 import { GachaDraw } from './gacha-draw.entity';
@@ -44,16 +45,16 @@ export class Order {
   @Column({ nullable: true })
   confirmations: number;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime' })
   expiresAt: Date;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime', nullable: true })
   paidAt: Date;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime', nullable: true })
   fulfilledAt: Date;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime', nullable: true })
   cancelledAt: Date;
 
   @Column({ type: 'text', nullable: true })

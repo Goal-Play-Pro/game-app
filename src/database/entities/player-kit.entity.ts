@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { OwnedPlayer } from './owned-player.entity';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 
 @Entity('player_kits')
 export class PlayerKit {
@@ -27,10 +28,10 @@ export class PlayerKit {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime', nullable: true })
   equippedAt: Date;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime', nullable: true })
   unequippedAt: Date;
 
   @CreateDateColumn()

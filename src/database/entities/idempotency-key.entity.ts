@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 
 @Entity('idempotency_keys')
 export class IdempotencyKey {
@@ -14,7 +15,7 @@ export class IdempotencyKey {
   @Column({ type: 'text' })
   response: string;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime' })
   expiresAt: Date;
 
   @CreateDateColumn()

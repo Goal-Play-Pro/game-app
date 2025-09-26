@@ -52,36 +52,25 @@ const createApiClient = (): AxiosInstance => {
     baseURL: API_CONFIG.BASE_URL,
     timeout: API_CONFIG.TIMEOUT,
     headers: API_CONFIG.DEFAULT_HEADERS,
-    // Configuración para API de producción
     validateStatus: (status) => status < 500,
     maxRedirects: 3,
     decompress: true,
-    withCredentials: false, // No enviar cookies cross-origin
+    withCredentials: true,
   });
 
-  // Interceptor para añadir token de autenticación
   client.interceptors.request.use(
     (config) => {
-      const token = localStorage.getItem(API_CONFIG.AUTH.TOKEN_KEY);
-      if (token) {
-        config.headers[API_CONFIG.AUTH.TOKEN_HEADER] = `Bearer ${token}`;
-      }
-      
-      // Log de debugging para desarrollo
       if (isDevelopment()) {
         console.log(`🌐 API Request: ${config.method?.toUpperCase()} ${API_CONFIG.BASE_URL}${config.url}`);
       }
-      
       return config;
     },
     (error) => Promise.reject(error)
   );
 
-  // Interceptor para manejar respuestas y errores
   client.interceptors.response.use(
     (response) => response,
     (error) => {
-      // Log de debugging para desarrollo
       if (isDevelopment()) {
         console.warn(`⚠️ API Request failed: ${error.config?.method?.toUpperCase()} ${API_CONFIG.BASE_URL}${error.config?.url}`, {
           status: error.response?.status,
@@ -89,11 +78,11 @@ const createApiClient = (): AxiosInstance => {
           message: error.message
         });
       }
-      
+
       if (error.response?.status === 401) {
-        localStorage.removeItem(API_CONFIG.AUTH.TOKEN_KEY);
-        localStorage.removeItem(API_CONFIG.AUTH.REFRESH_TOKEN_KEY);
+        sessionActive = false;
       }
+
       return Promise.reject(error);
     }
   );
@@ -103,6 +92,7 @@ const createApiClient = (): AxiosInstance => {
 
 // Instancia global del cliente API
 let apiClient = createApiClient();
+let sessionActive = false;
 
 // Función para recrear el cliente cuando cambie la URL base
 export const reinitializeApiClient = () => {
@@ -137,7 +127,7 @@ const makeRequest = async <T = any>(
           'Referer': API_CONFIG.FRONTEND_URL,
           ...config?.headers,
         },
-        withCredentials: false,
+        withCredentials: true,
       };
       
       switch (method) {
@@ -524,32 +514,26 @@ const FALLBACK_DATA = {
 
 // API Service Class
 export class ApiService {
-  static getAuthToken(): string | null {
-    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-      // Buscar token en múltiples ubicaciones posibles
-      return window.localStorage.getItem(API_CONFIG.AUTH.TOKEN_KEY) ||
-             window.localStorage.getItem('authToken') ||
-             window.localStorage.getItem('jwt_token') ||
-             window.localStorage.getItem('accessToken') ||
-             null;
-    }
-
-    if (typeof process !== 'undefined' && process.env && process.env.AUTH_TOKEN) {
-      return process.env.AUTH_TOKEN;
-    }
-
-    return null;
+  static markSessionActive(active: boolean) {
+    sessionActive = active;
   }
 
   static isAuthenticated(): boolean {
-    const token = this.getAuthToken();
-    const isAuth = !!token;
+    return sessionActive;
+  }
 
-    if (isDevelopment()) {
-      console.log(`🔐 Auth check - Token present: ${isAuth}`);
+  static async ensureSession(): Promise<boolean> {
+    if (sessionActive) {
+      return true;
     }
-
-    return isAuth;
+    try {
+      await apiClient.get('/auth/profile', { withCredentials: true });
+      ApiService.markSessionActive(true);
+      return true;
+    } catch {
+      ApiService.markSessionActive(false);
+      return false;
+    }
   }
 
   // Función para cambiar la URL base de la API
@@ -579,10 +563,12 @@ export class ApiService {
   }
 
   static async verifySiweSignature(message: string, signature: string) {
-    return makeRequest('POST', '/auth/siwe/verify', {
+    const result = await makeRequest('POST', '/auth/siwe/verify', {
       message,
       signature
     });
+    ApiService.markSessionActive(true);
+    return result;
   }
 
   static async createSolanaChallenge(publicKey: string) {
@@ -593,11 +579,21 @@ export class ApiService {
   }
 
   static async verifySolanaSignature(message: string, signature: string, publicKey: string) {
-    return makeRequest('POST', '/auth/solana/verify', {
+    const result = await makeRequest('POST', '/auth/solana/verify', {
       message,
       signature,
       publicKey
     });
+    ApiService.markSessionActive(true);
+    return result;
+  }
+
+  static async logout(): Promise<void> {
+    try {
+      await makeRequest('POST', '/auth/logout');
+    } finally {
+      ApiService.markSessionActive(false);
+    }
   }
 
   // PRODUCTOS Y TIENDA

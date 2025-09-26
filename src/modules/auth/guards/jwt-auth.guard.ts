@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { CanActivate, ExecutionContext } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { AUTH_COOKIE_NAME } from '../auth.constants';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -10,7 +11,7 @@ export class JwtAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const token = this.extractTokenFromHeader(request);
+    const token = this.extractToken(request);
     
     if (!token) {
       throw new UnauthorizedException('No token provided');
@@ -25,8 +26,13 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 
-  private extractTokenFromHeader(request: Request): string | undefined {
+  private extractToken(request: Request): string | undefined {
     const [type, token] = request.headers.authorization?.split(' ') ?? [];
-    return type === 'Bearer' ? token : undefined;
+    if (type === 'Bearer' && token) {
+      return token;
+    }
+
+    const cookieToken = (request as any).cookies?.[AUTH_COOKIE_NAME];
+    return typeof cookieToken === 'string' ? cookieToken : undefined;
   }
 }

@@ -5,13 +5,27 @@ import { Repository } from 'typeorm';
 import { CryptoService } from '../../common/services/crypto.service';
 import { User } from '../../database/entities/user.entity';
 import { Challenge } from '../../database/entities/challenge.entity';
-import { v4 as uuidv4 } from 'uuid';
+import { randomBytes } from 'crypto';
+import { SiweMessage } from 'siwe';
+import { getAddress } from 'ethers';
+import { PublicKey } from '@solana/web3.js';
+import { AUTH_COOKIE_MAX_AGE_MS } from './auth.constants';
+import { LoggerService } from '../../common/services/logger.service';
+import { SecurityMetricsService } from '../../common/services/security-metrics.service';
+
+interface AuthRequestContext {
+  ip?: string;
+}
 
 @Injectable()
 export class AuthService {
+  private readonly sessionMaxAgeMs = AUTH_COOKIE_MAX_AGE_MS;
+
   constructor(
     private jwtService: JwtService,
     private cryptoService: CryptoService,
+    private logger: LoggerService,
+    private securityMetrics: SecurityMetricsService,
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRepository(Challenge)
@@ -19,15 +33,22 @@ export class AuthService {
   ) {}
 
   async createSiweChallenge(address: string, chainId: number, statement: string) {
-    const nonce = uuidv4();
+    let checksumAddress: string;
+    try {
+      checksumAddress = getAddress(address);
+    } catch {
+      throw new UnauthorizedException('Invalid address');
+    }
+
+    const nonce = this.generateSiweNonce();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-    
-    const message = this.buildSiweMessage(address, chainId, statement, nonce, expiresAt);
-    
+
+    const message = this.buildSiweMessage(checksumAddress, chainId, statement, nonce, expiresAt);
+
     // Store challenge
     await this.challengeRepository.save({
       nonce,
-      address: address.toLowerCase(),
+      address: checksumAddress.toLowerCase(),
       chainType: this.getChainType(chainId),
       message,
       expiresAt,
@@ -41,95 +62,173 @@ export class AuthService {
     };
   }
 
-  async verifySiweSignature(message: string, signature: string) {
-    // Extract address from message
-    const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
-    if (!addressMatch) {
-      throw new UnauthorizedException('Invalid message format');
-    }
-    
-    const address = addressMatch[0].toLowerCase();
-    console.log(`🔐 Verifying SIWE signature for address: ${address}`);
-    
-    // Verify signature
-    const isValid = await this.cryptoService.verifySiweSignature(message, signature, address);
-    if (!isValid) {
-      console.error(`❌ Invalid signature for address: ${address}`);
-      throw new UnauthorizedException('Invalid signature');
-    }
-    
-    console.log(`✅ Valid signature for address: ${address}`);
+  async verifySiweSignature(message: string, signature: string, requestContext?: AuthRequestContext) {
+    let address = 'unknown';
+    let nonce = '';
+    let challenge: Challenge | null = null;
+    let user: User | null = null;
 
-    // Find and mark challenge as used
-    const challenge = await this.challengeRepository.findOne({
-      where: { 
-        address, 
-        used: false,
+    try {
+      const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
+      if (!addressMatch) {
+        throw new UnauthorizedException('Invalid message format');
       }
-    });
-    
-    if (!challenge || new Date(challenge.expiresAt) <= new Date()) {
-      console.error(`❌ Challenge not found or expired for address: ${address}`);
-      throw new UnauthorizedException('Challenge not found or expired');
-    }
 
-    await this.challengeRepository.update(challenge.id, { used: true });
-    console.log(`✅ Challenge marked as used: ${challenge.id}`);
+      address = addressMatch[0].toLowerCase();
+      nonce = this.extractNonceFromMessage(message) ?? '';
+      if (!nonce) {
+        throw new UnauthorizedException('Invalid message nonce');
+      }
 
-    // Find or create user
-    let user = await this.userRepository.findOne({
-      where: { walletAddress: address }
-    });
+      let parsedMessage: SiweMessage;
+      try {
+        parsedMessage = new SiweMessage(message);
+      } catch {
+        throw new UnauthorizedException('Invalid SIWE message');
+      }
 
-    if (!user) {
-      console.log(`👤 Creating new user for address: ${address}`);
-      user = await this.userRepository.save({
-        walletAddress: address,
-        chain: this.getChainType(1), // Default to ethereum
-        isActive: true,
-        lastLogin: new Date(),
-        metadata: JSON.stringify({
-          preferences: {
-            language: 'en',
-            notifications: true,
-          },
-        }),
+      if (parsedMessage.nonce !== nonce || parsedMessage.address.toLowerCase() !== address) {
+        throw new UnauthorizedException('Challenge not found or expired');
+      }
+
+      const isValid = await this.cryptoService.verifySiweSignature(message, signature, address);
+      if (!isValid) {
+        this.securityMetrics.recordLoginFailure({
+          method: 'siwe',
+          wallet: address,
+          ip: requestContext?.ip,
+          chainType: this.getChainType(1),
+        });
+        throw new UnauthorizedException('Invalid signature');
+      }
+
+      challenge = await this.challengeRepository.findOne({ where: { nonce } });
+      const now = new Date();
+
+      if (!challenge || challenge.address.toLowerCase() !== address || challenge.used || new Date(challenge.expiresAt) <= now) {
+        throw new UnauthorizedException('Challenge not found or expired');
+      }
+
+      let storedSiwe: SiweMessage;
+      try {
+        storedSiwe = new SiweMessage(challenge.message);
+      } catch {
+        throw new UnauthorizedException('Challenge not found or expired');
+      }
+
+      if (
+        parsedMessage.domain !== storedSiwe.domain ||
+        parsedMessage.uri !== storedSiwe.uri ||
+        parsedMessage.chainId !== storedSiwe.chainId ||
+        parsedMessage.nonce !== challenge.nonce ||
+        parsedMessage.address.toLowerCase() !== challenge.address.toLowerCase()
+      ) {
+        throw new UnauthorizedException('Challenge not found or expired');
+      }
+
+      const expectedChainId = this.getChainIdFromType(challenge.chainType);
+      if (expectedChainId !== undefined && parsedMessage.chainId !== expectedChainId) {
+        throw new UnauthorizedException('Challenge not found or expired');
+      }
+
+      if (challenge.message !== message) {
+        throw new UnauthorizedException('Challenge not found or expired');
+      }
+
+      const updateResult = await this.challengeRepository.update({ id: challenge.id, used: false }, { used: true });
+      if (!updateResult.affected) {
+        throw new UnauthorizedException('Challenge not found or expired');
+      }
+
+      user = await this.userRepository.findOne({
+        where: { walletAddress: address }
       });
-      console.log(`✅ New user created: ${user.id}`);
-    } else {
-      console.log(`👤 Existing user found: ${user.id}`);
-      await this.userRepository.update(user.id, {
-        lastLogin: new Date(),
-        isActive: true,
+
+      if (!user) {
+        user = await this.userRepository.save({
+          walletAddress: address,
+          chain: this.getChainType(1), // Default to ethereum
+          isActive: true,
+          lastLogin: new Date(),
+          metadata: JSON.stringify({
+            preferences: {
+              language: 'en',
+              notifications: true,
+            },
+          }),
+        });
+      } else {
+        await this.userRepository.update(user.id, {
+          lastLogin: new Date(),
+          isActive: true,
+        });
+      }
+
+      const payload = {
+        sub: user.id,
+        wallet: address,
+        chainType: user.chain,
+      };
+
+      const token = this.jwtService.sign(payload);
+
+      await this.logger.auditLog('auth.login.success', user.id, {
+        method: 'siwe',
+        wallet: address,
+        chainType: user.chain,
+        challengeId: challenge.id,
+        nonce,
       });
+
+      this.securityMetrics.recordLoginSuccess({
+        method: 'siwe',
+        wallet: address,
+        ip: requestContext?.ip,
+        chainType: user.chain,
+      });
+
+      return {
+        token,
+        userId: user.id,
+        primaryWallet: address,
+        expiresInMs: this.sessionMaxAgeMs,
+      };
+    } catch (error) {
+      const userId = user?.id ?? 'unknown';
+      await this.logger.auditLog('auth.login.failure', userId, {
+        method: 'siwe',
+        wallet: address,
+        nonce: nonce || undefined,
+        challengeId: challenge?.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.securityMetrics.recordLoginFailure({
+        method: 'siwe',
+        wallet: address !== 'unknown' ? address : undefined,
+        ip: requestContext?.ip,
+        chainType: challenge?.chainType,
+      });
+      throw error;
     }
-
-    // Generate JWT
-    const payload = {
-      sub: user.id,
-      wallet: address,
-      chainType: user.chain,
-    };
-
-    const accessToken = this.jwtService.sign(payload);
-
-    return {
-      accessToken,
-      userId: user.id,
-      primaryWallet: address,
-      expiresIn: '24h',
-    };
   }
 
   async createSolanaChallenge(publicKey: string, statement: string) {
-    const nonce = uuidv4();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    
-    const message = `Goal Play wants you to sign in with your Solana account:\n${publicKey}\n\n${statement}\n\nNonce: ${nonce}\nIssued At: ${new Date().toISOString()}\nExpiration Time: ${expiresAt.toISOString()}`;
-    
+    let normalizedKey: string;
+    try {
+      normalizedKey = new PublicKey(publicKey).toBase58();
+    } catch {
+      throw new UnauthorizedException('Invalid public key');
+    }
+
+    const nonce = this.generateSiweNonce();
+    const issuedAt = new Date();
+    const expiresAt = new Date(issuedAt.getTime() + 10 * 60 * 1000);
+
+    const message = `Goal Play wants you to sign in with your Solana account:\n${normalizedKey}\n\n${statement}\n\nNonce: ${nonce}\nIssued At: ${issuedAt.toISOString()}\nExpiration Time: ${expiresAt.toISOString()}`;
+
     await this.challengeRepository.save({
       nonce,
-      address: publicKey,
+      address: normalizedKey,
       chainType: 'solana',
       message,
       expiresAt,
@@ -143,46 +242,123 @@ export class AuthService {
     };
   }
 
-  async verifySolanaSignature(message: string, signature: string, publicKey: string) {
-    const isValid = await this.cryptoService.verifySolanaSignature(message, signature, publicKey);
-    if (!isValid) {
-      throw new UnauthorizedException('Invalid signature');
+  async verifySolanaSignature(message: string, signature: string, publicKey: string, requestContext?: AuthRequestContext) {
+    let normalizedKey: string;
+    try {
+      normalizedKey = new PublicKey(publicKey).toBase58();
+    } catch {
+      throw new UnauthorizedException('Invalid public key');
     }
 
-    // Similar flow to SIWE but for Solana
-    let user = await this.userRepository.findOne({
-      where: { walletAddress: publicKey }
-    });
+    const nonce = this.extractNonceFromMessage(message);
+    if (!nonce) {
+      throw new UnauthorizedException('Invalid message nonce');
+    }
 
-    if (!user) {
-      user = await this.userRepository.save({
-        walletAddress: publicKey,
-        chain: 'solana',
-        isActive: true,
-        lastLogin: new Date(),
-        metadata: JSON.stringify({
-          preferences: {
-            language: 'en',
-            notifications: true,
-          },
-        }),
+    let challenge: Challenge | null = null;
+    let user: User | null = null;
+
+    try {
+      const isValid = await this.cryptoService.verifySolanaSignature(message, signature, normalizedKey);
+      if (!isValid) {
+        this.securityMetrics.recordLoginFailure({
+          method: 'solana',
+          wallet: normalizedKey,
+          ip: requestContext?.ip,
+          chainType: 'solana',
+        });
+        throw new UnauthorizedException('Invalid signature');
+      }
+
+      challenge = await this.challengeRepository.findOne({ where: { nonce } });
+      if (!challenge || challenge.address !== normalizedKey || challenge.used || new Date(challenge.expiresAt) <= new Date()) {
+        throw new UnauthorizedException('Challenge not found or expired');
+      }
+
+      if (challenge.chainType !== 'solana' || challenge.message !== message) {
+        throw new UnauthorizedException('Challenge not found or expired');
+      }
+
+      const updateResult = await this.challengeRepository.update({ id: challenge.id, used: false }, { used: true });
+      if (!updateResult.affected) {
+        throw new UnauthorizedException('Challenge not found or expired');
+      }
+
+      user = await this.userRepository.findOne({
+        where: { walletAddress: normalizedKey }
       });
+
+      if (!user) {
+        user = await this.userRepository.save({
+          walletAddress: normalizedKey,
+          chain: 'solana',
+          isActive: true,
+          lastLogin: new Date(),
+          metadata: JSON.stringify({
+            preferences: {
+              language: 'en',
+              notifications: true,
+            },
+          }),
+        });
+      } else {
+        await this.userRepository.update(user.id, {
+          lastLogin: new Date(),
+          isActive: true,
+        });
+      }
+
+      const payload = {
+        sub: user.id,
+        wallet: normalizedKey,
+        chainType: 'solana',
+      };
+
+      const token = this.jwtService.sign(payload);
+
+      await this.logger.auditLog('auth.login.success', user.id, {
+        method: 'solana',
+        wallet: normalizedKey,
+        chainType: 'solana',
+        challengeId: challenge.id,
+        nonce,
+      });
+
+      this.securityMetrics.recordLoginSuccess({
+        method: 'solana',
+        wallet: normalizedKey,
+        ip: requestContext?.ip,
+        chainType: 'solana',
+      });
+
+      return {
+        token,
+        userId: user.id,
+        primaryWallet: normalizedKey,
+        expiresInMs: this.sessionMaxAgeMs,
+      };
+    } catch (error) {
+      const userId = user?.id ?? 'unknown';
+      await this.logger.auditLog('auth.login.failure', userId, {
+        method: 'solana',
+        wallet: normalizedKey,
+        nonce,
+        challengeId: challenge?.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.securityMetrics.recordLoginFailure({
+        method: 'solana',
+        wallet: normalizedKey,
+        ip: requestContext?.ip,
+        chainType: 'solana',
+      });
+      throw error;
     }
+  }
 
-    const payload = {
-      sub: user.id,
-      wallet: publicKey,
-      chainType: 'solana',
-    };
-
-    const accessToken = this.jwtService.sign(payload);
-
-    return {
-      accessToken,
-      userId: user.id,
-      primaryWallet: publicKey,
-      expiresIn: '24h',
-    };
+  private extractNonceFromMessage(message: string): string | null {
+    const match = message.match(/Nonce:\s*([\w-]+)/);
+    return match ? match[1] : null;
   }
 
   private buildSiweMessage(address: string, chainId: number, statement: string, nonce: string, expiresAt: Date): string {
@@ -218,6 +394,25 @@ export class AuthService {
       case 42161: return 'arbitrum';
       default: return 'ethereum';
     }
+  }
+
+  private getChainIdFromType(chainType: string): number | undefined {
+    switch (chainType) {
+      case 'ethereum':
+        return 1;
+      case 'bsc':
+        return 56;
+      case 'polygon':
+        return 137;
+      case 'arbitrum':
+        return 42161;
+      default:
+        return undefined;
+    }
+  }
+
+  private generateSiweNonce(): string {
+    return randomBytes(16).toString('hex');
   }
 
   async getUserProfile(userId: string) {

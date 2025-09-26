@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 import { User } from './user.entity';
 import { OwnedPlayer } from './owned-player.entity';
 import { PenaltyAttempt } from './penalty-attempt.entity';
@@ -44,10 +45,10 @@ export class PenaltySession {
   @Column()
   seed: string;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime', nullable: true })
   startedAt: Date;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime', nullable: true })
   completedAt: Date;
 
   @CreateDateColumn()

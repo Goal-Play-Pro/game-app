@@ -3,6 +3,7 @@ import { User } from './user.entity';
 import { Order } from './order.entity';
 import { GachaPool } from './gacha-pool.entity';
 import { OwnedPlayer } from './owned-player.entity';
+import { TIMESTAMP_COLUMN_TYPE } from '../database.constants';
 
 @Entity('gacha_draws')
 export class GachaDraw {
@@ -24,7 +25,7 @@ export class GachaDraw {
   @Column()
   seed: string;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ type: TIMESTAMP_COLUMN_TYPE as 'timestamptz' | 'datetime' })
   drawDate: Date;
 
   @CreateDateColumn()

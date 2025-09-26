@@ -21,7 +21,7 @@ export const BACKEND_CONFIG = {
   
   // Configuración de JWT
   JWT_SECRET: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production',
-  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '24h',
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '1h',
   
   // Configuración de CORS
   CORS_ORIGINS: [
@@ -40,6 +40,10 @@ export const BACKEND_CONFIG = {
   // Configuración de rate limiting
   THROTTLE_TTL: parseInt(process.env.THROTTLE_TTL || '60000'),
   THROTTLE_LIMIT: parseInt(process.env.THROTTLE_LIMIT || '100'),
+
+  // Auditoría
+  AUDIT_LOG_MAX_SIZE_BYTES: parseInt(process.env.AUDIT_LOG_MAX_SIZE_BYTES || `${5 * 1024 * 1024}`),
+  AUDIT_LOG_MAX_BACKUPS: parseInt(process.env.AUDIT_LOG_MAX_BACKUPS || '3'),
   
   // Wallets de recepción por blockchain
   RECEIVING_WALLETS: {

@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { DataAdapterService } from './services/data-adapter.service';
 import { CryptoService } from './services/crypto.service';
 import { LoggerService } from './services/logger.service';
+import { SecurityMetricsService } from './services/security-metrics.service';
 import { IdempotencyService } from './services/idempotency.service';
 
 @Global()
@@ -18,7 +19,7 @@ import { IdempotencyService } from './services/idempotency.service';
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET', 'your-secret-key'),
-        signOptions: { expiresIn: '24h' },
+        signOptions: { expiresIn: '1h' },
       }),
     }),
   ],
@@ -26,6 +27,7 @@ import { IdempotencyService } from './services/idempotency.service';
     DataAdapterService,
     CryptoService,
     LoggerService,
+    SecurityMetricsService,
     IdempotencyService,
   ],
   exports: [
@@ -34,6 +36,7 @@ import { IdempotencyService } from './services/idempotency.service';
     DataAdapterService,
     CryptoService,
     LoggerService,
+    SecurityMetricsService,
     IdempotencyService,
   ],
 })
