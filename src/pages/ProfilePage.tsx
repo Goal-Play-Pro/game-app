@@ -27,6 +27,7 @@ import { CompleteUserProfile } from '../services/api';
 import { useAuthStatus } from '../hooks/useAuthStatus';
 
 import { shareContent, showCopyNotification } from '../utils/share.utils';
+import { logWalletRequirement } from '../utils/wallet.utils';
 
 const ProfilePage = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'referrals' | 'wallets' | 'history' | 'settings'>(() => {
@@ -42,6 +43,12 @@ const ProfilePage = () => {
   // Get real user wallet address
   const connectedWalletAddress = localStorage.getItem('walletAddress');
   const isWalletConnected = localStorage.getItem('walletConnected') === 'true';
+
+  useEffect(() => {
+    if (!isWalletConnected || !connectedWalletAddress) {
+      logWalletRequirement('Profile page');
+    }
+  }, [isWalletConnected, connectedWalletAddress]);
 
   // Mock user data - in real app this would come from auth context
   const [currentUser, setCurrentUser] = useState({
@@ -200,6 +207,12 @@ const ProfilePage = () => {
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
+  const ownedPlayersList = Array.isArray(ownedPlayers) ? ownedPlayers : [];
+  const userSessionsList = Array.isArray(userSessions) ? userSessions : [];
+  const userOrdersList = Array.isArray(userOrders) ? userOrders : [];
+  const transactionsList = Array.isArray(transactions) ? transactions : [];
+  const userWalletsList = Array.isArray(userWallets) ? userWallets : [];
+
   const formatNumber = (num: number) => {
     if (num >= 1000000) {
       return (num / 1000000).toFixed(1) + 'M';
@@ -248,11 +261,18 @@ const ProfilePage = () => {
   };
 
   // Calculate stats
-  const totalPlayers = ownedPlayers?.length || 0;
-  const totalGames = userSessions?.length || 0;
-  const completedGames = userSessions?.filter(s => s.status === 'completed').length || 0;
+  const totalPlayers = ownedPlayersList.length;
+  const totalGames = userSessionsList.length;
+  const completedGames = userSessionsList.filter(s => s.status === 'completed').length;
   const winRate = completedGames > 0 ? ((completedGames * 0.7) * 100).toFixed(1) : '0'; // Mock win rate
-  const totalSpent = completeProfile?.totalSpent || userOrders?.reduce((sum, order) => sum + parseFloat(order.totalPriceUSDT), 0) || 0;
+  const totalSpentFromOrders = userOrdersList.reduce((sum, order) => {
+    const amount = parseFloat(order.totalPriceUSDT ?? '0');
+    return sum + (Number.isFinite(amount) ? amount : 0);
+  }, 0);
+  const totalSpent = completeProfile && typeof completeProfile.totalSpent === 'number'
+    ? completeProfile.totalSpent
+    : totalSpentFromOrders;
+  const normalizedTotalSpent = Number.isFinite(totalSpent) ? totalSpent : 0;
 
   if (!isWalletConnected || !connectedWalletAddress) {
     return (
@@ -341,7 +361,7 @@ const ProfilePage = () => {
                   </div>
 
                   {/* Connected Wallets Count */}
-                  {userWallets && userWallets.length > 1 && (
+                  {userWalletsList.length > 1 && (
                     <div className="mb-4">
                       <span className="text-sm text-gray-400">
                         ${completeProfile?.referralStats?.totalCommissions || '0.00'}
@@ -491,9 +511,9 @@ const ProfilePage = () => {
                     <div className="flex justify-center py-8">
                       <LoadingSpinner text="Loading activity..." />
                     </div>
-                  ) : userSessions && userSessions.length > 0 ? (
+                  ) : userSessionsList.length > 0 ? (
                     <div className="space-y-4">
-                      {userSessions.slice(0, 5).map((session) => (
+                      {userSessionsList.slice(0, 5).map((session) => (
                         <div key={session.id} className="flex items-center space-x-4 p-3 glass rounded-lg">
                           <div className="w-10 h-10 bg-gradient-to-r from-football-green to-football-blue rounded-full flex items-center justify-center">
                             <Target className="w-5 h-5 text-white" />
@@ -612,21 +632,22 @@ const ProfilePage = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-400">Average Level:</span>
                       <span className="text-white font-semibold">
-                        {ownedPlayers?.length ? 
-                          Math.round(ownedPlayers.reduce((sum, p) => sum + p.currentLevel, 0) / ownedPlayers.length) : 0
+                        {ownedPlayersList.length
+                          ? Math.round(ownedPlayersList.reduce((sum, p) => sum + p.currentLevel, 0) / ownedPlayersList.length)
+                          : 0
                         }
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Highest Level:</span>
                       <span className="text-white font-semibold">
-                        {ownedPlayers?.length ? Math.max(...ownedPlayers.map(p => p.currentLevel)) : 0}
+                        {ownedPlayersList.length ? Math.max(...ownedPlayersList.map(p => p.currentLevel)) : 0}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Total XP:</span>
                       <span className="text-white font-semibold">
-                        {formatNumber(ownedPlayers?.reduce((sum, p) => sum + p.experience, 0) || 0)}
+                        {formatNumber(ownedPlayersList.reduce((sum, p) => sum + p.experience, 0))}
                       </span>
                     </div>
                   </div>
@@ -645,7 +666,7 @@ const ProfilePage = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-400">Total Spent:</span>
                       <span className="text-white font-semibold">
-                        ${((completeProfile?.totalSpent || totalSpent) || 0).toFixed(2)}
+                        ${normalizedTotalSpent.toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -655,7 +676,7 @@ const ProfilePage = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-400">Net Profit:</span>
                       <span className="text-green-400 font-semibold">
-                        +${(1250 - ((completeProfile?.totalSpent || totalSpent) || 0)).toFixed(2)}
+                        +${(1250 - normalizedTotalSpent).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -888,9 +909,9 @@ const ProfilePage = () => {
                     <div className="flex justify-center py-8">
                       <LoadingSpinner text="Loading transactions..." />
                     </div>
-                  ) : transactions && transactions.length > 0 ? (
+                  ) : transactionsList.length > 0 ? (
                     <div className="space-y-4">
-                      {transactions.slice(0, 10).map((transaction) => (
+                      {transactionsList.slice(0, 10).map((transaction) => (
                         <div key={transaction.id} className="flex items-center justify-between p-4 glass rounded-lg">
                           <div className="flex items-center space-x-4">
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${

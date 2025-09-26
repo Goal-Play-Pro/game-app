@@ -64,8 +64,6 @@ export const API_CONFIG = {
   DEFAULT_HEADERS: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'Origin': frontendBaseUrl,
-    'Referer': frontendBaseUrl,
   },
 
   // Configuración de autenticación
@@ -141,6 +139,17 @@ export const API_CONFIG = {
   // URL base del frontend para compartir links (puede apuntar a otro dominio distinto a la API)
   FRONTEND_URL: frontendBaseUrl,
   ALLOW_FALLBACKS: allowFallbacks,
+};
+
+export const getDefaultRequestHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = { ...API_CONFIG.DEFAULT_HEADERS };
+
+  if (typeof window === 'undefined') {
+    headers.Origin = frontendBaseUrl;
+    headers.Referer = frontendBaseUrl;
+  }
+
+  return headers;
 };
 
 // Función para cambiar la URL base dinámicamente

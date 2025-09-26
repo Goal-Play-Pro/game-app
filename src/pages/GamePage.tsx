@@ -8,6 +8,8 @@ import PlayerStatsDisplay from '../components/player/PlayerStatsDisplay';
 import FarmingInterface from '../components/player/FarmingInterface';
 import { SessionType, PenaltyDirection } from '../types';
 import { useAuthStatus } from '../hooks/useAuthStatus';
+import { logWalletRequirement } from '../utils/wallet.utils';
+import { Link } from 'react-router-dom';
 
 const GamePage = () => {
   const [gameMode, setGameMode] = useState<'select' | 'playing' | 'result'>('select');
@@ -21,6 +23,12 @@ const GamePage = () => {
 
   const queryClient = useQueryClient();
 
+  useEffect(() => {
+    if (!isAuthenticated) {
+      logWalletRequirement('Game page');
+    }
+  }, [isAuthenticated]);
+
   // Fetch user's owned players
   const { data: ownedPlayers, isLoading: playersLoading } = useQuery({
     queryKey: ['owned-players'],
@@ -32,7 +40,7 @@ const GamePage = () => {
   });
 
   // Fetch active sessions
-  const { data: sessions, isLoading: sessionsLoading } = useQuery({
+  const { data: sessions } = useQuery({
     queryKey: ['penalty-sessions'],
     queryFn: ApiService.getUserSessions,
     enabled: isAuthenticated,
@@ -67,6 +75,15 @@ const GamePage = () => {
     refetchInterval: isAuthenticated && !!currentSession ? 2000 : false,
     retry: 2,
   });
+
+  const ownedPlayersList = Array.isArray(ownedPlayers) ? ownedPlayers : [];
+  const sessionStatus = typeof sessionDetails?.status === 'string' ? sessionDetails.status : undefined;
+  const sessionStatusClass = sessionStatus === 'in_progress'
+    ? 'text-green-400'
+    : sessionStatus === 'completed'
+      ? 'text-blue-400'
+      : 'text-yellow-400';
+  const sessionStatusLabel = sessionStatus ? sessionStatus.replace('_', ' ').toUpperCase() : 'UNKNOWN';
 
   // Create penalty session mutation
   const createSessionMutation = useMutation({
@@ -211,7 +228,7 @@ const GamePage = () => {
               <div className="glass-dark rounded-xl p-6">
                 <h2 className="text-2xl font-semibold text-white mb-6">Select Your Player</h2>
                 
-                {!ownedPlayers || ownedPlayers.length === 0 ? (
+                {ownedPlayersList.length === 0 ? (
                   <div className="text-center py-12">
                     <div className="w-16 h-16 bg-gray-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
                       <Users className="w-8 h-8 text-gray-500" />
@@ -224,7 +241,7 @@ const GamePage = () => {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {ownedPlayers.map((player) => (
+                    {ownedPlayersList.map((player) => (
                       <motion.div
                         key={player.id}
                         whileHover={{ scale: 1.05 }}
@@ -308,7 +325,7 @@ const GamePage = () => {
                   >
                     <PlayerStatsDisplay
                       playerStats={playerProgression.totalStats}
-                      division={ownedPlayers?.find(p => p.id === showPlayerDetails)?.player?.division || 'tercera'}
+                      division={ownedPlayersList.find(p => p.id === showPlayerDetails)?.player?.division || 'tercera'}
                       currentLevel={playerProgression.level}
                       experience={playerProgression.experience}
                       showProbability={true}
@@ -326,10 +343,10 @@ const GamePage = () => {
                   >
                     <FarmingInterface
                       ownedPlayerId={selectedPlayer}
-                      playerName={ownedPlayers?.find(p => p.id === selectedPlayer)?.player?.name || `Player #${selectedPlayer.slice(0, 6)}`}
-                      division={ownedPlayers?.find(p => p.id === selectedPlayer)?.player?.division || 'tercera'}
-                      currentLevel={ownedPlayers?.find(p => p.id === selectedPlayer)?.currentLevel || 1}
-                      experience={ownedPlayers?.find(p => p.id === selectedPlayer)?.experience || 0}
+                      playerName={ownedPlayersList.find(p => p.id === selectedPlayer)?.player?.name || `Player #${selectedPlayer.slice(0, 6)}`}
+                      division={ownedPlayersList.find(p => p.id === selectedPlayer)?.player?.division || 'tercera'}
+                      currentLevel={ownedPlayersList.find(p => p.id === selectedPlayer)?.currentLevel || 1}
+                      experience={ownedPlayersList.find(p => p.id === selectedPlayer)?.experience || 0}
                     />
                   </motion.div>
                 )}
@@ -446,12 +463,8 @@ const GamePage = () => {
                     </div>
                     <div className="text-white">
                       <span className="text-gray-400">Status:</span> 
-                      <span className={`ml-1 ${
-                        sessionDetails.status === 'in_progress' ? 'text-green-400' :
-                        sessionDetails.status === 'completed' ? 'text-blue-400' :
-                        'text-yellow-400'
-                      }`}>
-                        {sessionDetails.status.replace('_', ' ').toUpperCase()}
+                      <span className={`ml-1 ${sessionStatusClass}`}>
+                        {sessionStatusLabel}
                       </span>
                     </div>
                   </div>
@@ -579,7 +592,7 @@ const GamePage = () => {
                       <div className="text-sm text-gray-400">
                         Round {sessionDetails.currentRound} of {sessionDetails.maxRounds}
                       </div>
-                      {sessionDetails.status === 'completed' && sessionDetails.winnerId && (
+                      {sessionStatus === 'completed' && sessionDetails.winnerId && (
                         <div className="text-football-green font-semibold">
                           {sessionDetails.winnerId === sessionDetails.hostUserId ? 'You Won!' : 'You Lost!'}
                         </div>

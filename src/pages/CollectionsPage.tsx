@@ -19,6 +19,8 @@ const CollectionsPage = () => {
     }
   });
 
+  const collectionsList = Array.isArray(collections) ? collections : [];
+
   const timeframes = [
     { value: '24h', label: '24h' },
     { value: '7d', label: '7d' },
@@ -139,7 +141,7 @@ const CollectionsPage = () => {
                 </button>
               </div>
             </div>
-          ) : collections && collections.length > 0 ? (
+          ) : collectionsList.length > 0 ? (
             <>
               {/* Top 3 Collections - Featured */}
               <div className="mb-12">
@@ -147,7 +149,7 @@ const CollectionsPage = () => {
                   🏆 Top Performers
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {collections.slice(0, 3).map((collection, index) => (
+                  {collectionsList.slice(0, 3).map((collection, index) => (
                     <motion.div
                       key={collection.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -189,7 +191,7 @@ const CollectionsPage = () => {
 
                 {/* Collections List */}
                 <div className="space-y-4">
-                  {Array.isArray(collections) && collections.map((collection, index) => (
+                  {collectionsList.map((collection, index) => (
                     <motion.div
                       key={collection.id}
                       initial={{ opacity: 0, x: -20 }}

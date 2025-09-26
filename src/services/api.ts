@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import { API_CONFIG, getApiUrl } from '../config/api.config';
+import { API_CONFIG, getApiUrl, getDefaultRequestHeaders } from '../config/api.config';
 import {
   User,
   Wallet,
@@ -51,8 +51,9 @@ const createApiClient = (): AxiosInstance => {
   const client = axios.create({
     baseURL: API_CONFIG.BASE_URL,
     timeout: API_CONFIG.TIMEOUT,
-    headers: API_CONFIG.DEFAULT_HEADERS,
-    validateStatus: (status) => status < 500,
+    headers: getDefaultRequestHeaders(),
+    // Reject non-2xx responses so auth failures bubble up consistently
+    validateStatus: (status) => status >= 200 && status < 300,
     maxRedirects: 3,
     decompress: true,
     withCredentials: true,
@@ -117,15 +118,7 @@ const makeRequest = async <T = any>(
       let response: AxiosResponse<T>;
       
       // Configuración específica para cada intento
-      const defaultHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      };
-
-      if (typeof window === 'undefined') {
-        defaultHeaders.Origin = API_CONFIG.FRONTEND_URL;
-        defaultHeaders.Referer = API_CONFIG.FRONTEND_URL;
-      }
+      const defaultHeaders: Record<string, string> = getDefaultRequestHeaders();
 
       const requestConfig = {
         ...config,
@@ -547,10 +540,17 @@ export class ApiService {
       return true;
     }
     try {
-      await apiClient.get('/auth/profile', { withCredentials: true });
-      ApiService.markSessionActive(true);
-      return true;
-    } catch {
+      const response = await apiClient.get('/auth/profile', { withCredentials: true });
+      const isOk = response?.status && response.status >= 200 && response.status < 300;
+
+      if (isOk) {
+        ApiService.markSessionActive(true);
+        return true;
+      }
+
+      ApiService.markSessionActive(false);
+      return false;
+    } catch (error: any) {
       ApiService.markSessionActive(false);
       return false;
     }

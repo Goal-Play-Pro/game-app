@@ -17,7 +17,7 @@ describe('AuthService.verifySiweSignature', () => {
   let crypto: { verifySiweSignature: jest.Mock } & Partial<CryptoService>;
   let jwt: { sign: jest.Mock } & Partial<JwtService>;
   let users: { findOne: jest.Mock; save: jest.Mock; update: jest.Mock } & Partial<Repository<User>>;
-  let challenges: { findOne: jest.Mock; update: jest.Mock } & Partial<Repository<Challenge>>;
+  let challenges: { findOne: jest.Mock; update: jest.Mock; save: jest.Mock } & Partial<Repository<Challenge>>;
   let logger: { auditLog: jest.Mock; warn: jest.Mock } & Partial<LoggerService>;
   let metrics: {
     recordLoginSuccess: jest.Mock;
@@ -38,6 +38,7 @@ describe('AuthService.verifySiweSignature', () => {
     challenges = {
       findOne: jest.fn(),
       update: jest.fn(),
+      save: jest.fn(),
     };
     logger = {
       auditLog: jest.fn().mockResolvedValue(undefined),
@@ -77,6 +78,38 @@ describe('AuthService.verifySiweSignature', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     } as Challenge;
+  });
+
+  describe('createSiweChallenge', () => {
+    it('persists a challenge with normalized address and returns message', async () => {
+      const saveSpy = challenges.save.mockImplementation(async (payload) => ({ id: 'challenge-1', ...payload }));
+
+      const result = await service.createSiweChallenge('0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266', 1, 'Welcome');
+
+      expect(saveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nonce: expect.any(String),
+          address: '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266',
+          chainType: 'ethereum',
+          used: false,
+        }),
+      );
+
+      const savedChallenge = saveSpy.mock.calls[0][0];
+      expect(new Date(savedChallenge.expiresAt).getTime()).toBeGreaterThan(Date.now());
+      expect(result).toEqual(
+        expect.objectContaining({
+          nonce: savedChallenge.nonce,
+          message: savedChallenge.message,
+          expiresAt: expect.any(String),
+        }),
+      );
+    });
+
+    it('rejects invalid wallet addresses', async () => {
+      await expect(service.createSiweChallenge('not-an-address', 1, 'Hi')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(challenges.save).not.toHaveBeenCalled();
+    });
   });
 
   it('throws when challenge not found', async () => {

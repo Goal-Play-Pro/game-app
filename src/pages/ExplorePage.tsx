@@ -78,7 +78,9 @@ const ExplorePage = () => {
     setSearchQuery('');
   };
 
-  const displayNFTs = searchQuery.length > 2 ? searchResults?.nfts : nfts;
+  const nftsList = Array.isArray(nfts) ? nfts : [];
+  const searchResultsList = Array.isArray(searchResults?.nfts) ? searchResults.nfts : [];
+  const displayNFTs = searchQuery.length > 2 ? searchResultsList : nftsList;
 
   return (
     <div className="pt-24 pb-20">

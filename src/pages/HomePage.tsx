@@ -43,6 +43,9 @@ const HomePage = () => {
     retryDelay: 1000,
   });
 
+  const productsList = Array.isArray(products) ? products : [];
+  const leaderboardList = Array.isArray(leaderboard) ? leaderboard : [];
+
   // Check for referral code in URL
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -487,9 +490,9 @@ const HomePage = () => {
             <div className="flex justify-center py-20">
               <LoadingSpinner size="lg" text="Loading player packs..." />
             </div>
-          ) : (
+          ) : productsList.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {products?.slice(0, 3).map((product, index) => (
+              {productsList.slice(0, 3).map((product, index) => (
                 <motion.div
                   key={product.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -526,6 +529,10 @@ const HomePage = () => {
                   </Link>
                 </motion.div>
               ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-400">
+              No player packs available right now. Check back soon!
             </div>
           )}
 
@@ -904,11 +911,11 @@ const HomePage = () => {
             <div className="flex justify-center py-20">
               <LoadingSpinner size="lg" text="Loading leaderboard..." />
             </div>
-          ) : (
+          ) : leaderboardList.length > 0 ? (
             <div className="glass-dark rounded-xl overflow-hidden">
               <div className="p-6">
                 <div className="space-y-4">
-                  {leaderboard?.slice(0, 5).map((player, index) => (
+                  {leaderboardList.slice(0, 5).map((player, index) => (
                     <motion.div
                       key={player.userId}
                       initial={{ opacity: 0, x: -20 }}
@@ -944,6 +951,10 @@ const HomePage = () => {
                   View Full Leaderboard
                 </Link>
               </div>
+            </div>
+          ) : (
+            <div className="text-center py-20 text-gray-400">
+              Leaderboard data not available yet.
             </div>
           )}
         </div>

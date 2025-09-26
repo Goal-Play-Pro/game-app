@@ -150,6 +150,11 @@ const ShopPage = () => {
     retryDelay: 1000,
   });
 
+  const productsList = Array.isArray(products) ? products : [];
+  const variantsList = Array.isArray(variants) ? variants : [];
+  const ordersList = Array.isArray(orders) ? orders : [];
+  const realPlayersList = Array.isArray(realPlayersData) ? realPlayersData : [];
+
   // Create order mutation with robust error handling
   const createOrderMutation = useMutation({
     mutationFn: async ({ variantId, qty, chainType, wallet }: { 
@@ -323,7 +328,7 @@ const ShopPage = () => {
                         <span className="text-sm">API Error - Using fallback</span>
                       </div>
                     )}
-                    {!productsError && products && (
+                    {!productsError && productsList.length > 0 && (
                       <div className="flex items-center space-x-2 text-green-400">
                         <CheckCircle className="w-4 h-4" />
                         <span className="text-sm">Live API Data</span>
@@ -335,7 +340,7 @@ const ShopPage = () => {
                     <div className="flex justify-center py-12">
                       <LoadingSpinner size="lg" text="Loading products from API..." />
                     </div>
-                  ) : !products || products.length === 0 ? (
+                  ) : productsList.length === 0 ? (
                     <div className="text-center py-12">
                       <div className="w-16 h-16 bg-gray-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Package className="w-8 h-8 text-gray-500" />
@@ -347,7 +352,7 @@ const ShopPage = () => {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {products.map((product) => (
+                      {productsList.map((product) => (
                         <motion.div
                           key={product.id}
                           whileHover={{ scale: 1.02 }}
@@ -414,9 +419,9 @@ const ShopPage = () => {
                       <div className="flex justify-center py-8">
                         <LoadingSpinner text="Loading variants from API..." />
                       </div>
-                    ) : variants && variants.length > 0 ? (
+                    ) : variantsList.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {variants.map((variant) => (
+                        {variantsList.map((variant) => (
                           <ProductCard
                             key={variant.id}
                             variant={variant}
@@ -451,19 +456,19 @@ const ShopPage = () => {
                 >
                   <h3 className="text-xl font-semibold text-white mb-6">Purchase Pack</h3>
                   
-                  {selectedVariant && variants ? (
+                  {selectedVariant && variantsList.length > 0 ? (
                     <div className="space-y-6">
                       {/* Selected Pack Info */}
                       <div className="text-center">
                         <div className="text-lg font-semibold text-white mb-2">
-                          {variants.find(v => v.id === selectedVariant)?.name}
+                          {variantsList.find(v => v.id === selectedVariant)?.name}
                         </div>
                         <div className="text-2xl font-bold text-football-green">
-                          ${formatPrice(variants.find(v => v.id === selectedVariant)?.priceUSDT || '0')} USDT
+                          ${formatPrice(variantsList.find(v => v.id === selectedVariant)?.priceUSDT || '0')} USDT
                         </div>
                         <div className="text-sm text-gray-400 mt-1">
-                          Division: {variants.find(v => v.id === selectedVariant)?.division} • 
-                          Level: {variants.find(v => v.id === selectedVariant)?.level}
+                          Division: {variantsList.find(v => v.id === selectedVariant)?.division} • 
+                          Level: {variantsList.find(v => v.id === selectedVariant)?.level}
                         </div>
                       </div>
 
@@ -503,7 +508,7 @@ const ShopPage = () => {
                         <div className="flex justify-between text-lg">
                           <span className="text-gray-400">Total:</span>
                           <span className="font-bold text-football-green">
-                            ${formatPrice((parseFloat(variants.find(v => v.id === selectedVariant)?.priceUSDT || '0') * quantity).toFixed(2))} USDT
+                            ${formatPrice((parseFloat(variantsList.find(v => v.id === selectedVariant)?.priceUSDT || '0') * quantity).toFixed(2))} USDT
                           </span>
                         </div>
                       </div>
@@ -568,9 +573,9 @@ const ShopPage = () => {
                       </div>
                       <p className="text-gray-400 text-xs">Check your connection and try again</p>
                     </div>
-                  ) : orders && orders.length > 0 ? (
+                  ) : ordersList.length > 0 ? (
                     <div className="space-y-3">
-                      {orders.slice(0, 3).map((order) => (
+                      {ordersList.slice(0, 3).map((order) => (
                         <div key={order.id} className="flex items-center justify-between p-3 glass rounded-lg">
                           <div>
                             <div className="text-sm font-medium text-white">
@@ -653,9 +658,9 @@ const ShopPage = () => {
                     Retry
                   </button>
                 </div>
-              ) : orders && orders.length > 0 ? (
+              ) : ordersList.length > 0 ? (
                 <div className="space-y-4">
-                  {orders.map((order) => (
+                  {ordersList.map((order) => (
                     <div key={order.id} className="flex items-center justify-between p-4 glass rounded-lg">
                       <div className="flex items-center space-x-4">
                         <div className="w-12 h-12 bg-gradient-to-r from-football-green to-football-blue rounded-lg flex items-center justify-center">
@@ -730,7 +735,7 @@ const ShopPage = () => {
                 <div className="flex justify-center py-20">
                   <LoadingSpinner size="lg" text="Loading players from API..." />
                 </div>
-              ) : realPlayersData && realPlayersData.length > 0 ? (
+              ) : realPlayersList.length > 0 ? (
                 <div className="space-y-8">
                   {['primera', 'segunda', 'tercera'].map((div) => (
                     <div key={div} className="glass-dark rounded-xl p-6">
@@ -740,7 +745,7 @@ const ShopPage = () => {
                         </span>
                         <span>{div.charAt(0).toUpperCase() + div.slice(1)} División</span>
                         <span className="text-sm text-gray-400">
-                          ({realPlayersData.filter(p => p.division === div).length} players)
+                          ({realPlayersList.filter(p => p.division === div).length} players)
                         </span>
                       </h3>
                       

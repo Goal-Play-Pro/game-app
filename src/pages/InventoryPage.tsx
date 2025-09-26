@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Settings, TrendingUp, Star, Palette, Trophy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -7,11 +7,18 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import PlayerStatsDisplay from '../components/player/PlayerStatsDisplay';
 import FarmingInterface from '../components/player/FarmingInterface';
 import { useAuthStatus } from '../hooks/useAuthStatus';
+import { logWalletRequirement } from '../utils/wallet.utils';
 
 const InventoryPage = () => {
   const [activeTab, setActiveTab] = useState<'players' | 'kits' | 'stats' | 'farming'>('players');
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
   const isAuthenticated = useAuthStatus();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      logWalletRequirement('Inventory page');
+    }
+  }, [isAuthenticated]);
 
   // Fetch user's owned players
   const { data: ownedPlayers, isLoading: playersLoading } = useQuery({
@@ -42,6 +49,12 @@ const InventoryPage = () => {
     enabled: isAuthenticated && !!selectedPlayer,
     refetchInterval: isAuthenticated && !!selectedPlayer ? 5000 : false,
   });
+
+  const ownedPlayersList = Array.isArray(ownedPlayers) ? ownedPlayers : [];
+  const selectedPlayerInfo = selectedPlayer ? ownedPlayersList.find(player => player.id === selectedPlayer) : undefined;
+  const totalLevels = ownedPlayersList.reduce((sum, player) => sum + (player?.currentLevel || 0), 0);
+  const totalExperience = ownedPlayersList.reduce((sum, player) => sum + (player?.experience || 0), 0);
+  const elitePlayers = ownedPlayersList.filter(player => (player?.currentLevel || 0) >= 10).length;
 
   const tabs = [
     { id: 'players', label: 'My Players', icon: Users },
@@ -106,28 +119,28 @@ const InventoryPage = () => {
         >
           <div className="glass-dark rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-white mb-1">
-              {ownedPlayers?.length || 0}
+              {ownedPlayersList.length}
             </div>
             <div className="text-sm text-gray-400">Total Players</div>
           </div>
           
           <div className="glass-dark rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-white mb-1">
-              {ownedPlayers?.reduce((sum, p) => sum + p.currentLevel, 0) || 0}
+              {totalLevels}
             </div>
             <div className="text-sm text-gray-400">Total Levels</div>
           </div>
           
           <div className="glass-dark rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-white mb-1">
-              {ownedPlayers?.reduce((sum, p) => sum + p.experience, 0) || 0}
+              {totalExperience}
             </div>
             <div className="text-sm text-gray-400">Total XP</div>
           </div>
           
           <div className="glass-dark rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-white mb-1">
-              {ownedPlayers?.filter(p => p.currentLevel >= 10).length || 0}
+              {elitePlayers}
             </div>
             <div className="text-sm text-gray-400">Elite Players</div>
           </div>
@@ -164,7 +177,7 @@ const InventoryPage = () => {
         >
           {activeTab === 'players' && (
             <div className="space-y-6">
-              {!ownedPlayers || ownedPlayers.length === 0 ? (
+              {ownedPlayersList.length === 0 ? (
                 <div className="glass-dark rounded-xl p-12 text-center">
                   <div className="w-16 h-16 bg-gray-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Users className="w-8 h-8 text-gray-500" />
@@ -177,7 +190,7 @@ const InventoryPage = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {ownedPlayers.map((player) => (
+                  {ownedPlayersList.map((player) => (
                     <motion.div
                       key={player.id}
                       whileHover={{ scale: 1.05 }}
@@ -246,7 +259,7 @@ const InventoryPage = () => {
               )}
 
               {/* Player Details */}
-              {selectedPlayer && playerProgression && (
+              {selectedPlayerInfo && playerProgression && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -254,7 +267,7 @@ const InventoryPage = () => {
                 >
                   <PlayerStatsDisplay
                     playerStats={playerProgression.totalStats}
-                    division={ownedPlayers?.find(p => p.id === selectedPlayer)?.division || 'tercera'}
+                    division={selectedPlayerInfo?.division || 'tercera'}
                     currentLevel={playerProgression.level}
                     experience={playerProgression.experience}
                     showProbability={true}
@@ -267,13 +280,13 @@ const InventoryPage = () => {
 
           {activeTab === 'farming' && (
             <div className="space-y-6">
-              {selectedPlayer ? (
+              {selectedPlayerInfo ? (
                 <FarmingInterface
                   ownedPlayerId={selectedPlayer}
                   playerName={`Player #${selectedPlayer.slice(0, 6)}`}
-                  division={ownedPlayers?.find(p => p.id === selectedPlayer)?.division || 'tercera'}
-                  currentLevel={ownedPlayers?.find(p => p.id === selectedPlayer)?.currentLevel || 1}
-                  experience={ownedPlayers?.find(p => p.id === selectedPlayer)?.experience || 0}
+                  division={selectedPlayerInfo?.division || 'tercera'}
+                  currentLevel={selectedPlayerInfo?.currentLevel || 1}
+                  experience={selectedPlayerInfo?.experience || 0}
                 />
               ) : (
                 <div className="glass-dark rounded-xl p-12 text-center">
@@ -289,7 +302,7 @@ const InventoryPage = () => {
 
           {activeTab === 'kits' && (
             <div className="space-y-6">
-              {selectedPlayer ? (
+              {selectedPlayerInfo ? (
                 <div className="glass-dark rounded-xl p-6">
                   <h3 className="text-xl font-semibold text-white mb-6">Customize Player Kit</h3>
                   
@@ -381,20 +394,20 @@ const InventoryPage = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-gray-400">Total Players:</span>
-                      <span className="text-white font-semibold">{ownedPlayers?.length || 0}</span>
+                      <span className="text-white font-semibold">{ownedPlayersList.length}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Average Level:</span>
                       <span className="text-white font-semibold">
-                        {ownedPlayers?.length ? 
-                          Math.round(ownedPlayers.reduce((sum, p) => sum + p.currentLevel, 0) / ownedPlayers.length) : 0
-                        }
+                        {ownedPlayersList.length
+                          ? Math.round(totalLevels / ownedPlayersList.length)
+                          : 0}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Highest Level:</span>
                       <span className="text-white font-semibold">
-                        {ownedPlayers?.length ? Math.max(...ownedPlayers.map(p => p.currentLevel)) : 0}
+                        {ownedPlayersList.length ? Math.max(...ownedPlayersList.map(p => p.currentLevel || 0)) : 0}
                       </span>
                     </div>
                   </div>
