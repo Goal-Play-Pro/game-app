@@ -166,7 +166,6 @@ export const checkBackendHealth = async (): Promise<boolean> => {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Origin': frontendBaseUrl,
       },
       cache: 'no-cache',
       signal: AbortSignal.timeout(15000), // 15 segundos timeout para API remota

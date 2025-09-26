@@ -117,14 +117,21 @@ const makeRequest = async <T = any>(
       let response: AxiosResponse<T>;
       
       // Configuración específica para cada intento
+      const defaultHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      };
+
+      if (typeof window === 'undefined') {
+        defaultHeaders.Origin = API_CONFIG.FRONTEND_URL;
+        defaultHeaders.Referer = API_CONFIG.FRONTEND_URL;
+      }
+
       const requestConfig = {
         ...config,
         timeout: attempt === 1 ? 15000 : 30000, // Timeout más generoso para API remota
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Origin': API_CONFIG.FRONTEND_URL,
-          'Referer': API_CONFIG.FRONTEND_URL,
+          ...defaultHeaders,
           ...config?.headers,
         },
         withCredentials: true,
