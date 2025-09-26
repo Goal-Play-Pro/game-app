@@ -185,44 +185,20 @@ export const useWallet = () => {
       const chainId = await ethereum.request({ method: 'eth_chainId' });
       const chainIdNumber = parseInt(chainId, 16);
 
-      // Switch to BSC if not already on it
-      if (chainIdNumber !== 56) {
-        try {
-          await ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: BSC_NETWORK.chainId }],
-          });
-        } catch (switchError: any) {
-          // If BSC is not added to MetaMask, add it
-          if (switchError.code === 4902) {
-            await ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [BSC_NETWORK],
-            });
-          } else {
-            throw switchError;
-          }
-        }
-      }
-
-      // Get updated chain info after potential switch
-      const finalChainId = await ethereum.request({ method: 'eth_chainId' });
-      const finalChainIdNumber = parseInt(finalChainId, 16);
-
       try {
-        await authenticateWallet(accounts[0], finalChainIdNumber);
-        persistWalletConnection(accounts[0], finalChainIdNumber);
+        await authenticateWallet(accounts[0], chainIdNumber);
+        persistWalletConnection(accounts[0], chainIdNumber);
 
         setWalletState({
           isConnected: true,
           address: accounts[0],
-          chainId: finalChainIdNumber,
-          chainType: getChainType(finalChainIdNumber),
+          chainId: chainIdNumber,
+          chainType: getChainType(chainIdNumber),
           isConnecting: false,
           error: null,
         });
 
-        console.log(`✅ Wallet connected: ${accounts[0]} on ${getNetworkName(finalChainIdNumber)}`);
+        console.log(`✅ Wallet connected: ${accounts[0]} on ${getNetworkName(chainIdNumber)}`);
       } catch (authError: any) {
         console.error('❌ Wallet authentication failed:', authError);
         clearWalletPersistence();

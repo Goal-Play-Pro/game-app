@@ -36,36 +36,47 @@ export const usePayment = () => {
       orderId,
       receivingWallet,
       amount,
-      userWallet
     }: {
       orderId: string;
       receivingWallet: string;
       amount: string;
-      userWallet: string;
     }) => {
       console.log(`💳 Procesando pago real para orden ${orderId}`);
       
-      // 1. Verificar conexión a MetaMask y BSC
-      const connection = await PaymentService.connectAndSwitchToBSC();
-      if (!connection.success) {
-        throw new Error(connection.error || 'Failed to connect to MetaMask');
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) {
+        throw new Error('MetaMask is required for payments');
       }
 
-      // 2. Verificar balance USDT
-      const balance = await PaymentService.getUSDTBalance(userWallet);
+      // 1. Verificar que la wallet siga conectada
+      const accounts: string[] = await ethereum.request({ method: 'eth_accounts' });
+      const activeAccount = accounts[0];
+
+      if (!activeAccount) {
+        throw new Error('Please connect your wallet before initiating a payment');
+      }
+
+      // 2. Cambiar a BSC solo cuando el usuario inicia el pago
+      const ensureNetwork = await PaymentService.ensureBscNetwork();
+      if (!ensureNetwork.success) {
+        throw new Error(ensureNetwork.error || 'Failed to switch to BSC');
+      }
+
+      // 3. Verificar balance USDT
+      const balance = await PaymentService.getUSDTBalance(activeAccount);
       if (parseFloat(balance.formatted) < parseFloat(amount)) {
         throw new Error(`Insufficient USDT balance. Required: ${amount} USDT, Available: ${balance.formatted} USDT`);
       }
 
-      // 3. Estimar gas
-      const gasEstimate = await PaymentService.estimateUSDTGas(receivingWallet, amount, userWallet);
+      // 4. Estimar gas
+      const gasEstimate = await PaymentService.estimateUSDTGas(receivingWallet, amount, activeAccount);
       console.log(`⛽ Gas estimado: ${gasEstimate.gasCostUSD} USD`);
 
-      // 4. Ejecutar pago real
+      // 5. Ejecutar pago real
       const paymentResult = await PaymentService.executeUSDTPayment(
         receivingWallet,
         amount,
-        userWallet
+        activeAccount
       );
 
       if (!paymentResult.success) {
@@ -74,7 +85,7 @@ export const usePayment = () => {
 
       console.log(`✅ Pago exitoso: ${paymentResult.transactionHash}`);
 
-      // 5. Notificar al backend sobre el pago
+      // 6. Notificar al backend sobre el pago
       const notificationResult = await ApiService.notifyPaymentCompleted(
         orderId,
         paymentResult.transactionHash!
@@ -153,7 +164,6 @@ export const usePayment = () => {
         orderId,
         receivingWallet,
         amount,
-        userWallet,
       });
 
       return result;

@@ -55,27 +55,55 @@ describe('PaymentService (frontend helpers)', () => {
     });
   });
 
-  describe('connectAndSwitchToBSC', () => {
-    it('requests accounts and switches network when needed', async () => {
-      ethereum.request
-        .mockResolvedValueOnce(['0xabc'])
-        .mockResolvedValueOnce('0x1');
+  describe('ensureBscNetwork', () => {
+    it('returns success when already on BSC', async () => {
+      const switchSpy = jest.spyOn(PaymentService, 'switchToBSC');
+      ethereum.request.mockResolvedValueOnce('0x38');
 
+      const result = await PaymentService.ensureBscNetwork();
+
+      expect(ethereum.request).toHaveBeenCalledWith({ method: 'eth_chainId' });
+      expect(switchSpy).not.toHaveBeenCalled();
+      expect(result).toEqual({ success: true, chainId: 56 });
+
+      switchSpy.mockRestore();
+    });
+
+    it('switches network when not already on BSC', async () => {
       const switchSpy = jest.spyOn(PaymentService, 'switchToBSC').mockResolvedValue();
+      ethereum.request.mockResolvedValueOnce('0x1');
 
-      const result = await PaymentService.connectAndSwitchToBSC();
+      const result = await PaymentService.ensureBscNetwork();
 
-      expect(ethereum.request).toHaveBeenNthCalledWith(1, { method: 'eth_requestAccounts' });
-      expect(ethereum.request).toHaveBeenNthCalledWith(2, { method: 'eth_chainId' });
+      expect(ethereum.request).toHaveBeenCalledWith({ method: 'eth_chainId' });
       expect(switchSpy).toHaveBeenCalled();
-      expect(result).toEqual({ success: true, address: '0xabc' });
+      expect(result).toEqual({ success: true, chainId: 56 });
+
+      switchSpy.mockRestore();
     });
 
     it('returns error when provider missing', async () => {
       global.window = {} as Window;
 
-      const result = await PaymentService.connectAndSwitchToBSC();
+      const result = await PaymentService.ensureBscNetwork();
       expect(result).toEqual({ success: false, error: 'MetaMask not installed' });
+
+      global.window = { ethereum } as unknown as Window;
+    });
+
+    it('propagates switch errors', async () => {
+      const switchSpy = jest
+        .spyOn(PaymentService, 'switchToBSC')
+        .mockRejectedValue(new Error('switch failed'));
+      ethereum.request.mockResolvedValueOnce('0x1');
+
+      const result = await PaymentService.ensureBscNetwork();
+
+      expect(switchSpy).toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('switch failed');
+
+      switchSpy.mockRestore();
     });
   });
 

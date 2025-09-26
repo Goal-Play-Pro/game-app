@@ -27,41 +27,36 @@ export class PaymentService {
   }
 
   /**
-   * Conectar a MetaMask y cambiar a BSC
+   * Asegura que la wallet esté conectada a BSC.
+   * Solo se invoca durante acciones sensibles (pagos) que el usuario inicia explícitamente,
+   * evitando cambios automáticos de red en el flujo de conexión.
    */
-  static async connectAndSwitchToBSC(): Promise<{
+  static async ensureBscNetwork(): Promise<{
     success: boolean;
-    address?: string;
+    chainId?: number;
     error?: string;
   }> {
+    const ethereum = (window as any).ethereum;
+
+    if (!ethereum) {
+      return { success: false, error: 'MetaMask not installed' };
+    }
+
     try {
-      const ethereum = (window as any).ethereum;
-      if (!ethereum) {
-        return { success: false, error: 'MetaMask not installed' };
+      const currentChainIdHex = await ethereum.request({ method: 'eth_chainId' });
+      const currentChainId = parseInt(currentChainIdHex, 16);
+
+      if (currentChainId === this.BSC_CHAIN_ID) {
+        return { success: true, chainId: currentChainId };
       }
 
-      // Solicitar conexión
-      const accounts = await ethereum.request({
-        method: 'eth_requestAccounts',
-      });
-
-      if (accounts.length === 0) {
-        return { success: false, error: 'No accounts found' };
-      }
-
-      // Verificar/cambiar a BSC
-      const chainId = await ethereum.request({ method: 'eth_chainId' });
-      
-      if (parseInt(chainId, 16) !== this.BSC_CHAIN_ID) {
-        await this.switchToBSC();
-      }
-
-      return { success: true, address: accounts[0] };
+      await this.switchToBSC();
+      return { success: true, chainId: this.BSC_CHAIN_ID };
     } catch (error: any) {
-      console.error('Error connecting to MetaMask:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Failed to connect to MetaMask' 
+      console.error('Error ensuring BSC network:', error);
+      return {
+        success: false,
+        error: error?.message || 'Failed to switch to BSC network',
       };
     }
   }
