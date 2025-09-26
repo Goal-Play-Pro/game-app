@@ -9,8 +9,8 @@ interface AddToMetaMaskProps {
 }
 
 const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToMetaMaskProps) => {
-  const [isAdding, setIsAdding] = useState(false);
-  const [addStatus, setAddStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [isCopying, setIsCopying] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   // Token information from BSC contract
   const tokenInfo = {
@@ -20,111 +20,20 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
     image: 'https://photos.pinksale.finance/file/pinksale-logo-upload/1757174953372-9634c48090be099c9daecc972d29f028.png'
   };
 
-  const addTokenToMetaMask = async () => {
-    const ethereum = (window as any).ethereum;
-    if (!ethereum) {
-      setAddStatus('error');
-      console.error('❌ MetaMask not detected');
-      return;
-    }
-
-    setIsAdding(true);
-    setAddStatus('idle');
+  const copyTokenDetails = async () => {
+    const formattedDetails = `Token: ${tokenInfo.symbol}\nContract: ${tokenInfo.address}\nDecimals: ${tokenInfo.decimals}\nNetwork: BNB Smart Chain`;
 
     try {
-      console.log('🦊 Adding GOAL token to MetaMask...');
-      
-      // Check if we're on BSC network
-      const chainId = await ethereum.request({ method: 'eth_chainId' });
-      console.log(`🔗 Current chain ID: ${chainId}`);
-      
-      if (chainId !== '0x38') { // BSC Mainnet chain ID
-        console.log('🔄 Switching to BSC network...');
-        // Switch to BSC network first
-        try {
-          await ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x38' }],
-          });
-          console.log('✅ Switched to BSC successfully');
-        } catch (switchError: any) {
-          // If BSC is not added to MetaMask, add it
-          if (switchError.code === 4902) {
-            console.log('➕ Adding BSC network to MetaMask...');
-            await ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: '0x38',
-                chainName: 'BNB Smart Chain',
-                nativeCurrency: {
-                  name: 'BNB',
-                  symbol: 'BNB',
-                  decimals: 18,
-                },
-                rpcUrls: ['https://bsc-dataseed1.binance.org/'],
-                blockExplorerUrls: ['https://bscscan.com/'],
-              }],
-            });
-            console.log('✅ BSC network added successfully');
-          } else {
-            throw switchError;
-          }
-        }
-      }
-
-      // Add token to MetaMask
-      console.log('🪙 Adding GOAL token with details:', tokenInfo);
-      const result = await ethereum.request({
-        method: 'wallet_watchAsset',
-        params: [{
-          type: 'ERC20',
-          options: {
-            address: tokenInfo.address,
-            symbol: tokenInfo.symbol,
-            decimals: tokenInfo.decimals,
-            image: tokenInfo.image
-          },
-        }],
-      });
-
-      if (result) {
-        setAddStatus('success');
-        console.log('✅ GOAL token added to MetaMask successfully!');
-      } else {
-        setAddStatus('error');
-        console.log('❌ User rejected adding GOAL token');
-      }
+      setIsCopying(true);
+      setCopyStatus('idle');
+      await navigator.clipboard.writeText(formattedDetails);
+      setCopyStatus('success');
+      console.log('✅ Token details copied to clipboard');
     } catch (error) {
-      console.error('❌ Error adding token to MetaMask:', error);
-      setAddStatus('error');
-      
-      // Try without image if image causes issues
-      if ((error as any).message?.includes('image') || (error as any).code === -32602) {
-        try {
-          console.log('🔄 Retrying without image...');
-          const result = await ethereum.request({
-            method: 'wallet_watchAsset',
-            params: [{
-              type: 'ERC20',
-              options: {
-                address: tokenInfo.address,
-                symbol: tokenInfo.symbol,
-                decimals: tokenInfo.decimals,
-              },
-            }],
-          });
-          
-          if (result) {
-            setAddStatus('success');
-            console.log('✅ GOAL token added to MetaMask successfully (without image)!');
-          }
-        } catch (retryError) {
-          console.error('❌ Retry failed:', retryError);
-          setAddStatus('error');
-        }
-      }
+      console.error('❌ Error copying token details:', error);
+      setCopyStatus('error');
     } finally {
-      setIsAdding(false);
+      setIsCopying(false);
     }
   };
 
@@ -145,10 +54,10 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
       {showTitle && (
         <div className="text-center mb-6">
           <h3 className="text-xl md:text-2xl font-display font-bold gradient-text mb-2">
-            Añadir Token GOAL a MetaMask
+            Token GOAL details
           </h3>
           <p className="text-gray-400">
-            Añade el token GOAL a tu wallet MetaMask con un solo clic
+            Usa la información a continuación para añadir el token GOAL manualmente en tu wallet.
           </p>
         </div>
       )}
@@ -211,78 +120,56 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
           </div>
         </div>
 
-        {/* Add to MetaMask Button */}
+        {/* Copy Token Details */}
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={addTokenToMetaMask}
-          disabled={isAdding}
+          onClick={copyTokenDetails}
+          disabled={isCopying}
           className={`w-full btn-primary flex items-center justify-center space-x-2 ${sizeClasses[size]} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          {isAdding ? (
+          {isCopying ? (
             <>
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
-              <span>Adding to MetaMask...</span>
-            </>
-          ) : addStatus === 'success' ? (
-            <>
-              <CheckCircle className={iconSizes[size]} />
-              <span>Added Successfully!</span>
-            </>
-          ) : addStatus === 'error' ? (
-            <>
-              <AlertCircle className={iconSizes[size]} />
-              <span>Try Again</span>
+              <span>Copying details...</span>
             </>
           ) : (
             <>
               <Plus className={iconSizes[size]} />
-              <span>Añadir GOAL a MetaMask</span>
+              <span>Copy GOAL token info</span>
             </>
           )}
         </motion.button>
 
         {/* Status Messages */}
-        {addStatus === 'success' && (
+        {copyStatus === 'success' && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-center"
           >
             <p className="text-green-400 text-sm">
-              ✅ ¡El token GOAL se ha añadido a tu wallet MetaMask!
+              Datos copiados. Pégalos en MetaMask → Import Tokens → Custom token.
             </p>
           </motion.div>
         )}
 
-        {addStatus === 'error' && (
+        {copyStatus === 'error' && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-center"
           >
             <p className="text-red-400 text-sm">
-              ❌ Error al añadir el token. {!(window as any).ethereum ? 'Instala MetaMask primero.' : 'Inténtalo de nuevo.'}
+              ❌ No se pudo copiar automáticamente. Copia manualmente el contrato mostrado arriba.
             </p>
-            {!(window as any).ethereum && (
-              <a
-                href="https://metamask.io/download/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center space-x-1 text-red-300 hover:text-red-200 transition-colors text-sm mt-2"
-              >
-                <span>Descargar MetaMask</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
           </motion.div>
         )}
 
-        {/* Instructions */}
-        <div className="mt-6 text-center">
-          <p className="text-gray-400 text-xs">
-            Esto añadirá el token GOAL (7 decimales) a tu wallet MetaMask en BNB Smart Chain
-          </p>
+        <div className="mt-6 text-xs text-gray-500 space-y-2">
+          <p>· En MetaMask abre "Import Tokens" &gt; "Import custom token" y pega los datos copiados.</p>
+          <p>· Verifica que estés en BNB Smart Chain antes de añadir el contrato.</p>
+          <p>· También puedes escribir los valores manualmente si el portapapeles no está disponible.</p>
         </div>
       </div>
     </div>

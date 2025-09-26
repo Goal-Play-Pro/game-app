@@ -112,7 +112,9 @@ export const useWallet = () => {
       const accounts = await ethereum.request({ method: 'eth_accounts' });
       if (accounts.length === 0) {
         clearWalletPersistence();
-        ApiService.logout().catch(() => {});
+        if (ApiService.isAuthenticated()) {
+          ApiService.logout().catch(() => {});
+        }
         ApiService.markSessionActive(false);
         setWalletState({
           isConnected: false,
@@ -127,42 +129,35 @@ export const useWallet = () => {
 
       const chainId = await ethereum.request({ method: 'eth_chainId' });
       const chainIdNumber = parseInt(chainId, 16);
-
-      setWalletState({
-        isConnected: true,
-        address: accounts[0],
-        chainId: chainIdNumber,
-        chainType: getChainType(chainIdNumber),
-        isConnecting: false,
-        error: null,
-      });
-
-      persistWalletConnection(accounts[0], chainIdNumber);
-
       const hasSession = await ApiService.ensureSession();
 
-      if (!hasSession) {
-        try {
-          await authenticateWallet(accounts[0], chainIdNumber);
-        } catch (error: any) {
-          console.error('❌ Wallet authentication failed during auto-connect:', error);
-          clearWalletPersistence();
-          ApiService.logout().catch(() => {});
-          ApiService.markSessionActive(false);
-          setWalletState({
-            isConnected: false,
-            address: null,
-            chainId: null,
-            chainType: null,
-            isConnecting: false,
-            error: error?.message || 'Wallet authentication failed',
-          });
-        }
+      if (hasSession) {
+        persistWalletConnection(accounts[0], chainIdNumber);
+        setWalletState({
+          isConnected: true,
+          address: accounts[0],
+          chainId: chainIdNumber,
+          chainType: getChainType(chainIdNumber),
+          isConnecting: false,
+          error: null,
+        });
+        return;
       }
+
+      clearWalletPersistence();
+      ApiService.markSessionActive(false);
+      setWalletState({
+        isConnected: false,
+        address: null,
+        chainId: null,
+        chainType: null,
+        isConnecting: false,
+        error: 'Session expired. Click connect to authenticate again.',
+      });
     } catch (error) {
       console.error('Error checking wallet connection:', error);
     }
-  }, [authenticateWallet]);
+  }, []);
 
   const connectWallet = async () => {
     const ethereum = (window as any).ethereum;
@@ -202,7 +197,9 @@ export const useWallet = () => {
       } catch (authError: any) {
         console.error('❌ Wallet authentication failed:', authError);
         clearWalletPersistence();
-        ApiService.logout().catch(() => {});
+        if (ApiService.isAuthenticated()) {
+          ApiService.logout().catch(() => {});
+        }
         ApiService.markSessionActive(false);
         setWalletState({
           isConnected: false,
@@ -224,8 +221,10 @@ export const useWallet = () => {
     }
   };
 
-  const disconnectWallet = () => {
-    ApiService.logout().catch(() => {});
+  const disconnectWallet = useCallback(() => {
+    if (ApiService.isAuthenticated()) {
+      ApiService.logout().catch(() => {});
+    }
     ApiService.markSessionActive(false);
     setWalletState({
       isConnected: false,
@@ -239,7 +238,7 @@ export const useWallet = () => {
     clearWalletPersistence();
     
     console.log('🔌 Wallet disconnected');
-  };
+  }, []);
 
   const switchToNetwork = async (targetChainId: number) => {
     const ethereum = (window as any).ethereum;
@@ -273,35 +272,17 @@ export const useWallet = () => {
         return;
       }
 
-      const chainIdHex = await ethereum.request({ method: 'eth_chainId' });
-      const chainIdNumber = parseInt(chainIdHex, 16);
-
-      try {
-        await authenticateWallet(accounts[0], chainIdNumber);
-        persistWalletConnection(accounts[0], chainIdNumber);
-
-        setWalletState({
-          isConnected: true,
-          address: accounts[0],
-          chainId: chainIdNumber,
-          chainType: getChainType(chainIdNumber),
-          isConnecting: false,
-          error: null,
-        });
-      } catch (error: any) {
-        console.error('❌ Wallet authentication failed after account change:', error);
-        clearWalletPersistence();
-        ApiService.logout().catch(() => {});
-        ApiService.markSessionActive(false);
-        setWalletState({
-          isConnected: false,
-          address: null,
-          chainId: null,
-          chainType: null,
-          isConnecting: false,
-          error: error?.message || 'Wallet authentication failed',
-        });
-      }
+      clearWalletPersistence();
+      ApiService.markSessionActive(false);
+      setWalletState(prev => ({
+        ...prev,
+        isConnected: false,
+        address: null,
+        chainId: null,
+        chainType: null,
+        isConnecting: false,
+        error: 'Account changed. Please reconnect your wallet.',
+      }));
     };
 
     const handleChainChanged = (chainId: string) => {
@@ -331,7 +312,7 @@ export const useWallet = () => {
         ethereum.removeListener?.('chainChanged', handleChainChanged);
       }
     };
-  }, [authenticateWallet, checkConnection]);
+  }, [checkConnection, disconnectWallet]);
 
   return {
     ...walletState,

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import Web3 from 'web3';
+import { Web3 } from 'web3';
 import { AbiItem } from 'web3-utils';
 import BigNumber from 'bignumber.js';
 import { EtherscanClient, EtherscanClientError } from './etherscan.client';
@@ -81,8 +81,6 @@ export class BlockchainService {
       }
 
       // 4. Decodificar logs para encontrar Transfer event
-      const contract = new this.web3.eth.Contract(this.USDT_ABI, this.USDT_CONTRACT);
-      
       // Decodificar eventos Transfer manualmente
       const transferEvents = receipt.logs
         .filter(log => log.address.toLowerCase() === this.USDT_CONTRACT.toLowerCase())

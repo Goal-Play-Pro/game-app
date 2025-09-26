@@ -9,12 +9,15 @@ import { getReceivingWallet } from '../../config/backend.config';
 import { GachaService } from '../gacha/gacha.service';
 import { ReferralService } from '../referral/referral.service';
 import { BlockchainService } from '../../services/blockchain.service';
+import { Web3 } from 'web3';
+import BigNumber from 'bignumber.js';
 
 @Injectable()
 export class OrderService {
   private readonly logger = new Logger(OrderService.name);
 
   private readonly REQUIRED_CONFIRMATIONS = 12;
+  private readonly web3 = new Web3('https://bsc-dataseed1.binance.org/');
 
   constructor(
     @InjectRepository(Order)
@@ -123,8 +126,8 @@ export class OrderService {
 
   private async getCurrentBlockNumber(): Promise<number> {
     try {
-      const web3 = new (require('web3'))('https://bsc-dataseed1.binance.org/');
-      return await web3.eth.getBlockNumber();
+      const blockNumber = await this.web3.eth.getBlockNumber();
+      return Number(blockNumber);
     } catch (error) {
       this.logger.error('Error obteniendo número de bloque actual:', error);
       return 0;
@@ -133,7 +136,6 @@ export class OrderService {
 
   private compareAmounts(txValue: string, expectedUSDT: string): boolean {
     try {
-      const BigNumber = require('bignumber.js');
       const txAmount = new BigNumber(txValue).dividedBy(new BigNumber(10).pow(18));
       const expectedAmount = new BigNumber(expectedUSDT);
       
@@ -320,9 +322,12 @@ export class OrderService {
     let transactionHash = order.transactionHash;
 
     if (!transactionHash) {
+      const currentBlock = await this.getCurrentBlockNumber();
+      const startBlock = currentBlock > 0 ? Math.max(0, currentBlock - 1000) : undefined;
+
       const recentTxs = await this.blockchainService.getUSDTTransactionsForAddress(
         order.receivingWallet,
-        await this.getCurrentBlockNumber() - 1000
+        startBlock
       );
 
       const matchingTx = recentTxs.find(tx =>

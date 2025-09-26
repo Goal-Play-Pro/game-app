@@ -9,6 +9,7 @@ interface PaymentState {
   isProcessing: boolean;
   error: string | null;
   transactionHash: string | null;
+  approvalTransactionHash: string | null;
   needsApproval: boolean;
   status: PaymentProgressStatus;
   confirmations: number;
@@ -21,6 +22,7 @@ export const usePayment = () => {
     isProcessing: false,
     error: null,
     transactionHash: null,
+    approvalTransactionHash: null,
     needsApproval: false,
     status: 'idle',
     confirmations: 0,
@@ -41,59 +43,23 @@ export const usePayment = () => {
       receivingWallet: string;
       amount: string;
     }) => {
-      console.log(`💳 Procesando pago real para orden ${orderId}`);
-      
-      const ethereum = (window as any).ethereum;
-      if (!ethereum) {
-        throw new Error('MetaMask is required for payments');
+      console.log(`💳 Processing payment via gateway for order ${orderId}`);
+
+      const execution = await PaymentService.processOrderPayment(orderId, receivingWallet, amount);
+
+      if (!execution.success || !execution.paymentHash) {
+        throw new Error(execution.error || 'Payment failed');
       }
 
-      // 1. Verificar que la wallet siga conectada
-      const accounts: string[] = await ethereum.request({ method: 'eth_accounts' });
-      const activeAccount = accounts[0];
-
-      if (!activeAccount) {
-        throw new Error('Please connect your wallet before initiating a payment');
-      }
-
-      // 2. Cambiar a BSC solo cuando el usuario inicia el pago
-      const ensureNetwork = await PaymentService.ensureBscNetwork();
-      if (!ensureNetwork.success) {
-        throw new Error(ensureNetwork.error || 'Failed to switch to BSC');
-      }
-
-      // 3. Verificar balance USDT
-      const balance = await PaymentService.getUSDTBalance(activeAccount);
-      if (parseFloat(balance.formatted) < parseFloat(amount)) {
-        throw new Error(`Insufficient USDT balance. Required: ${amount} USDT, Available: ${balance.formatted} USDT`);
-      }
-
-      // 4. Estimar gas
-      const gasEstimate = await PaymentService.estimateUSDTGas(receivingWallet, amount, activeAccount);
-      console.log(`⛽ Gas estimado: ${gasEstimate.gasCostUSD} USD`);
-
-      // 5. Ejecutar pago real
-      const paymentResult = await PaymentService.executeUSDTPayment(
-        receivingWallet,
-        amount,
-        activeAccount
-      );
-
-      if (!paymentResult.success) {
-        throw new Error(paymentResult.error || 'Payment failed');
-      }
-
-      console.log(`✅ Pago exitoso: ${paymentResult.transactionHash}`);
-
-      // 6. Notificar al backend sobre el pago
       const notificationResult = await ApiService.notifyPaymentCompleted(
         orderId,
-        paymentResult.transactionHash!
+        execution.paymentHash
       );
 
       return {
         ...notificationResult,
-        transactionHash: paymentResult.transactionHash!,
+        transactionHash: execution.paymentHash,
+        approvalHash: execution.approvalHash,
         orderId,
       };
     },
@@ -103,6 +69,7 @@ export const usePayment = () => {
         isProcessing: true,
         error: null,
         transactionHash: null,
+        approvalTransactionHash: null,
         needsApproval: false,
         status: 'processing',
         confirmations: 0,
@@ -115,7 +82,8 @@ export const usePayment = () => {
         isProcessing: false,
         error: null,
         transactionHash: data.transactionHash || prev.transactionHash,
-        needsApproval: false,
+        approvalTransactionHash: data.approvalHash || prev.approvalTransactionHash,
+        needsApproval: Boolean(data.approvalHash),
         status: data.status === 'pending_confirmations'
           ? 'confirming'
           : data.status === 'fulfilled' || data.status === 'paid'
@@ -139,6 +107,7 @@ export const usePayment = () => {
         isProcessing: false,
         error: error.message,
         transactionHash: null,
+        approvalTransactionHash: null,
         needsApproval: false,
         status: 'idle',
       }));
@@ -227,6 +196,7 @@ export const usePayment = () => {
       isProcessing: false,
       error: null,
       transactionHash: null,
+      approvalTransactionHash: null,
       needsApproval: false,
       status: 'idle',
       confirmations: 0,
@@ -242,6 +212,7 @@ export const usePayment = () => {
         ...prev,
         orderId,
         transactionHash: status.transactionHash || prev.transactionHash,
+        approvalTransactionHash: prev.approvalTransactionHash,
         confirmations: status.confirmations || 0,
         requiredConfirmations: status.requiredConfirmations || prev.requiredConfirmations,
         status: status.status === 'fulfilled' || status.status === 'paid' ? 'completed'

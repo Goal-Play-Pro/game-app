@@ -6,6 +6,13 @@ import { API_CONFIG } from './config/api.config'
 import App from './App.tsx'
 import './index.css'
 
+if (typeof window !== 'undefined') {
+  (window as any).__APP_ENV__ = {
+    ...(window as any).__APP_ENV__,
+    ...import.meta.env,
+  };
+}
+
 // Log de configuración inicial
 console.log('🚀 Goal Play Frontend iniciando...');
 console.log('🔗 Production API URL configurada:', API_CONFIG.BASE_URL);

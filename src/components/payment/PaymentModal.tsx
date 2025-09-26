@@ -40,6 +40,7 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
     isProcessing,
     error,
     transactionHash,
+    approvalTransactionHash,
     resetPaymentState,
     status,
     confirmations,
@@ -407,6 +408,9 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                         <ExternalLink className="w-4 h-4" />
                       </a>
                     </div>
+                    <p className="mt-3 text-xs text-gray-500 text-left">
+                      MetaMask will request one or two confirmations: a token approval (if needed) followed by the payment transaction. Review each prompt carefully before accepting.
+                    </p>
                   </div>
 
                   {/* Payment Button */}
@@ -430,24 +434,24 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                   <div className="w-16 h-16 bg-gradient-to-r from-football-blue to-football-purple rounded-full flex items-center justify-center mx-auto mb-4">
                     <LoadingSpinner size="sm" color="white" />
                   </div>
-                  <h4 className="text-lg font-semibold text-white mb-2">Processing Payment</h4>
+                  <h4 className="text-lg font-semibold text-white mb-2">Confirming in MetaMask</h4>
                   <p className="text-gray-400 mb-6">
-                    Please confirm the transaction in MetaMask. We will update once it reaches the blockchain.
+                    Approve the prompts in MetaMask to authorize the payment gateway and send your USDT.
                   </p>
                   
                   <div className="glass rounded-lg p-4">
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-                        <span className="text-gray-400">Waiting for MetaMask confirmation...</span>
+                        <span className="text-gray-400">Waiting for token approval and payment confirmations...</span>
                       </div>
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-gray-400 rounded-full" />
-                        <span className="text-gray-400">Blockchain confirmation will start after MetaMask approval</span>
+                        <span className="text-gray-400">Validating transaction with the payment gateway…</span>
                       </div>
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-gray-400 rounded-full" />
-                        <span className="text-gray-400">Processing gacha draw...</span>
+                        <span className="text-gray-400">Preparing to notify Goal Play backend…</span>
                       </div>
                     </div>
                   </div>
@@ -483,6 +487,29 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                         />
                       </div>
                     </div>
+
+                    {approvalTransactionHash && (
+                      <div className="text-left text-sm">
+                        <div className="text-gray-400 mb-1">Approval Transaction</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-mono text-xs">
+                            {approvalTransactionHash.slice(0, 10)}...{approvalTransactionHash.slice(-8)}
+                          </span>
+                          <button
+                            onClick={() => copyAddress(approvalTransactionHash)}
+                            className="p-1 text-gray-400 hover:text-white transition-colors"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openInExplorer(approvalTransactionHash)}
+                            className="p-1 text-gray-400 hover:text-white transition-colors"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {transactionHash && (
                       <div className="text-left text-sm">
@@ -536,24 +563,49 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                     Your payment has been confirmed. Your players will be added to your inventory shortly.
                   </p>
                   
-                  <div className="glass rounded-lg p-4 mb-6">
-                    <div className="text-sm text-gray-400 mb-2">Transaction Hash:</div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-white font-mono text-sm">
-                        {transactionHash.slice(0, 10)}...{transactionHash.slice(-8)}
-                      </span>
-                      <button
-                        onClick={() => copyAddress(transactionHash)}
-                        className="p-1 text-gray-400 hover:text-white transition-colors"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => openInExplorer(transactionHash)}
-                        className="p-1 text-gray-400 hover:text-white transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </button>
+                  <div className="glass rounded-lg p-4 mb-6 space-y-3">
+                    {approvalTransactionHash && (
+                      <div>
+                        <div className="text-sm text-gray-400 mb-1">Approval Transaction</div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-white font-mono text-sm">
+                            {approvalTransactionHash.slice(0, 10)}...{approvalTransactionHash.slice(-8)}
+                          </span>
+                          <button
+                            onClick={() => copyAddress(approvalTransactionHash)}
+                            className="p-1 text-gray-400 hover:text-white transition-colors"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openInExplorer(approvalTransactionHash)}
+                            className="p-1 text-gray-400 hover:text-white transition-colors"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="text-sm text-gray-400 mb-1">Payment Transaction</div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-white font-mono text-sm">
+                          {transactionHash.slice(0, 10)}...{transactionHash.slice(-8)}
+                        </span>
+                        <button
+                          onClick={() => copyAddress(transactionHash)}
+                          className="p-1 text-gray-400 hover:text-white transition-colors"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => openInExplorer(transactionHash)}
+                          className="p-1 text-gray-400 hover:text-white transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
 

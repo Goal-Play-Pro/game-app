@@ -1,4 +1,5 @@
 import { ethers } from 'ethers';
+import { PAYMENT_CONFIG } from '../config/payment.config';
 
 /**
  * Payment Service - Manejo de pagos reales con MetaMask
@@ -8,6 +9,7 @@ export class PaymentService {
   // USDT Contract en BSC Mainnet
   private static readonly USDT_CONTRACT = '0x55d398326f99059fF775485246999027B3197955';
   private static readonly BSC_CHAIN_ID = 56;
+  private static readonly PAYMENT_GATEWAY_CONTRACT = PAYMENT_CONFIG.PAYMENT_GATEWAY_CONTRACT;
   
   // ABI mínimo para USDT (solo transfer)
   private static readonly USDT_ABI = [
@@ -17,6 +19,10 @@ export class PaymentService {
     'function symbol() view returns (string)',
     'function allowance(address owner, address spender) view returns (uint256)',
     'function approve(address spender, uint256 amount) returns (bool)'
+  ];
+
+  private static readonly PAYMENT_GATEWAY_ABI = [
+    'function payOrder(bytes32 orderId, address token, address merchant, uint256 amount) external'
   ];
 
   /**
@@ -204,6 +210,92 @@ export class PaymentService {
         success: false,
         error: error.message || 'Payment failed',
       };
+    }
+  }
+
+  /**
+   * Ejecutar pago USDT usando contrato de gateway seguro
+   */
+  static async processOrderPayment(
+    orderId: string,
+    merchantWallet: string,
+    amount: string
+  ): Promise<{
+    success: boolean;
+    paymentHash?: string;
+    approvalHash?: string;
+    error?: string;
+  }> {
+    const ethereum = (window as any).ethereum;
+
+    if (!ethereum) {
+      return { success: false, error: 'MetaMask not detected' };
+    }
+
+    if (!this.PAYMENT_GATEWAY_CONTRACT) {
+      return { success: false, error: 'Payment gateway contract not configured' };
+    }
+
+    try {
+      const accounts: string[] = await ethereum.request({ method: 'eth_accounts' });
+      const activeAccount = accounts?.[0];
+
+      if (!activeAccount) {
+        return { success: false, error: 'Please connect your wallet before paying' };
+      }
+
+      const ensureNetwork = await this.ensureBscNetwork();
+      if (!ensureNetwork.success) {
+        return { success: false, error: ensureNetwork.error || 'Failed to switch to BSC' };
+      }
+
+      const provider = new ethers.BrowserProvider(ethereum);
+      const signer = await provider.getSigner();
+      const usdtContract = new ethers.Contract(this.USDT_CONTRACT, this.USDT_ABI, signer);
+      const gatewayContract = new ethers.Contract(this.PAYMENT_GATEWAY_CONTRACT, this.PAYMENT_GATEWAY_ABI, signer);
+      const normalizedMerchant = ethers.getAddress(merchantWallet);
+
+      const amountWei = ethers.parseUnits(amount, 18);
+      const balance: bigint = await usdtContract.balanceOf(activeAccount);
+
+      if (balance < amountWei) {
+        return {
+          success: false,
+          error: `Insufficient USDT balance. Required: ${amount} USDT, Available: ${ethers.formatUnits(balance, 18)} USDT`,
+        };
+      }
+
+      const allowance: bigint = await usdtContract.allowance(activeAccount, this.PAYMENT_GATEWAY_CONTRACT);
+
+      let approvalHash: string | undefined;
+      if (allowance < amountWei) {
+        console.log('📝 Soliciting allowance approval for payment gateway...');
+        const approvalTx = await usdtContract.approve(this.PAYMENT_GATEWAY_CONTRACT, amountWei);
+        approvalHash = approvalTx.hash;
+        await approvalTx.wait();
+        console.log('✅ Approval confirmed:', approvalHash);
+      }
+
+      const orderHash = ethers.id(orderId);
+      console.log('🚀 Executing gateway payment', { orderId, orderHash, merchantWallet: normalizedMerchant, amount });
+      const paymentTx = await gatewayContract.payOrder(orderHash, this.USDT_CONTRACT, normalizedMerchant, amountWei);
+      const receipt = await paymentTx.wait();
+
+      if (!receipt?.status) {
+        return { success: false, error: 'Payment transaction failed on-chain' };
+      }
+
+      return {
+        success: true,
+        paymentHash: paymentTx.hash,
+        approvalHash,
+      };
+    } catch (error: any) {
+      console.error('❌ Error executing gateway payment:', error);
+      if (error.code === 'ACTION_REJECTED') {
+        return { success: false, error: 'Payment cancelled by user' };
+      }
+      return { success: false, error: error?.message || 'Payment failed' };
     }
   }
 

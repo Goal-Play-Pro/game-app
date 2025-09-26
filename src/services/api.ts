@@ -94,6 +94,7 @@ const createApiClient = (): AxiosInstance => {
 // Instancia global del cliente API
 let apiClient = createApiClient();
 let sessionActive = false;
+let logoutInFlight: Promise<void> | null = null;
 
 // Función para recrear el cliente cuando cambie la URL base
 export const reinitializeApiClient = () => {
@@ -578,7 +579,7 @@ export class ApiService {
     return makeRequest('POST', '/auth/siwe/challenge', {
       address,
       chainId,
-      statement: 'Sign in to Gol Play'
+      statement: 'Sign in to Goal Play'
     });
   }
 
@@ -594,7 +595,7 @@ export class ApiService {
   static async createSolanaChallenge(publicKey: string) {
     return makeRequest('POST', '/auth/solana/challenge', {
       publicKey,
-      statement: 'Sign in to Gol Play'
+      statement: 'Sign in to Goal Play'
     });
   }
 
@@ -609,11 +610,49 @@ export class ApiService {
   }
 
   static async logout(): Promise<void> {
-    try {
-      await makeRequest('POST', '/auth/logout');
-    } finally {
-      ApiService.markSessionActive(false);
+    if (!sessionActive && !logoutInFlight) {
+      return;
     }
+
+    if (logoutInFlight) {
+      return logoutInFlight;
+    }
+
+    const performLogout = async () => {
+      if (!sessionActive) {
+        ApiService.markSessionActive(false);
+        return;
+      }
+
+      try {
+        await makeRequest('POST', '/auth/logout');
+      } catch (error: any) {
+        const status = error?.response?.status ?? error?.status;
+
+        if (status === 401 || status === 403) {
+          return;
+        }
+
+        if (status === 429) {
+          console.warn('⚠️ Logout request throttled (429). Assuming session already closed.');
+          return;
+        }
+
+        throw error;
+      } finally {
+        ApiService.markSessionActive(false);
+      }
+    };
+
+    logoutInFlight = performLogout()
+      .catch((error) => {
+        throw error;
+      })
+      .finally(() => {
+        logoutInFlight = null;
+      });
+
+    return logoutInFlight;
   }
 
   // PRODUCTOS Y TIENDA
