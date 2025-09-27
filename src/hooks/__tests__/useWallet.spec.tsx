@@ -19,7 +19,7 @@ jest.mock('../../services/api', () => {
   };
 });
 
-import { useWallet } from '../useWallet';
+import { getGuardedProvider, useWallet } from '../useWallet';
 
 type Eip1193Provider = {
   request: jest.Mock;
@@ -169,7 +169,10 @@ describe('useWallet', () => {
     queryClient = new QueryClient();
     renderHook(() => useWallet(), { wrapper: Wrapper });
 
-    await expect(provider.request({ method: 'eth_sign' })).rejects.toThrow(
+    const guardedProvider = getGuardedProvider(provider);
+    expect(guardedProvider).toBeDefined();
+
+    await expect(guardedProvider!.request({ method: 'eth_sign' })).rejects.toThrow(
       'Direct eth_sign requests are blocked for security reasons.',
     );
   });

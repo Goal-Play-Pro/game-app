@@ -13,7 +13,6 @@ interface Eip1193Provider {
   isSafePal?: boolean;
   on?: (event: string, handler: (...args: any[]) => void) => void;
   removeListener?: (event: string, handler: (...args: any[]) => void) => void;
-  __goalplayGuarded?: boolean;
 }
 
 interface WalletWindow extends Window {
@@ -67,6 +66,16 @@ const normalizeWalletType = (value: string | null | undefined): WalletType | nul
     return value;
   }
   return null;
+};
+
+const guardedProviderCache = new WeakMap<Eip1193Provider, Eip1193Provider>();
+const originalProviderLookup = new WeakMap<Eip1193Provider, Eip1193Provider>();
+
+export const getGuardedProvider = (provider: Eip1193Provider): Eip1193Provider | undefined => {
+  if (originalProviderLookup.has(provider)) {
+    return provider;
+  }
+  return guardedProviderCache.get(provider);
 };
 
 export const useWallet = () => {
@@ -139,8 +148,18 @@ export const useWallet = () => {
       return null;
     }
 
-    if (!provider || provider.__goalplayGuarded) {
+    if (!provider) {
       return provider;
+    }
+
+    const alreadyOriginal = originalProviderLookup.get(provider);
+    if (alreadyOriginal) {
+      return provider;
+    }
+
+    const cachedGuard = guardedProviderCache.get(provider);
+    if (cachedGuard) {
+      return cachedGuard;
     }
 
     const originalRequest = typeof provider.request === 'function' ? provider.request.bind(provider) : null;
@@ -156,7 +175,7 @@ export const useWallet = () => {
       'eth_signtypeddata_v4',
     ]);
 
-    provider.request = async (...args: any[]) => {
+    const guardedRequest = async (...args: any[]) => {
       const request = args[0];
       const method = typeof request === 'string' ? request : request?.method;
       const normalizedMethod = typeof method === 'string' ? method.toLowerCase() : '';
@@ -175,14 +194,28 @@ export const useWallet = () => {
       return originalRequest(...args);
     };
 
-    Object.defineProperty(provider, '__goalplayGuarded', {
-      configurable: false,
-      enumerable: false,
-      writable: false,
-      value: true,
+    const guarded = new Proxy(provider, {
+      get(target, prop, receiver) {
+        if (prop === 'request') {
+          return guardedRequest;
+        }
+
+        if (prop === '__goalplayGuarded') {
+          return true;
+        }
+
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value === 'function') {
+          return value.bind(target);
+        }
+        return value;
+      },
     });
 
-    return provider;
+    guardedProviderCache.set(provider, guarded as Eip1193Provider);
+    originalProviderLookup.set(guarded as Eip1193Provider, provider as Eip1193Provider);
+
+    return guarded as Eip1193Provider;
   }, []);
 
   const getProvider = useCallback(() => {
