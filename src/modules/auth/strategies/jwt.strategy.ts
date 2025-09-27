@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import type { StrategyOptions } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { resolveJwtConfig, ResolvedJwtConfig } from '../../../common/config/jwt.config';
 
@@ -32,7 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       secretsByKid.set(jwtConfig.previous.kid, jwtConfig.previous.secret);
     }
 
-    super({
+    const strategyOptions: StrategyOptions & { clockTolerance?: number } = {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKeyProvider: (_request, rawToken, done) => {
@@ -60,7 +61,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       audience: jwtConfig.audience,
       issuer: jwtConfig.issuer,
       clockTolerance: jwtConfig.clockTolerance,
-    });
+    };
+
+    super(strategyOptions);
 
     this.jwtConfig = jwtConfig;
   }
