@@ -11,16 +11,21 @@ interface WalletConnectProps {
 
 const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: WalletConnectProps) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const { 
-    isConnected, 
-    address, 
-    chainId, 
-    chainType, 
-    isConnecting, 
-    error, 
-    connectWallet, 
+  const {
+    isConnected,
+    address,
+    caip10Address,
+    chainId,
+    chainType,
+    isConnecting,
+    isAuthenticating,
+    needsAuth,
+    error,
+    isFrameBlocked,
+    connectWallet,
+    signInWallet,
     disconnectWallet,
-    switchToNetwork 
+    switchToNetwork,
   } = useWallet();
 
   const sizeClasses = {
@@ -61,8 +66,8 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
   };
 
   const copyAddress = () => {
-    if (address) {
-      navigator.clipboard.writeText(address);
+    if (caip10Address) {
+      navigator.clipboard.writeText(caip10Address);
       // You could add a toast notification here
     }
   };
@@ -98,7 +103,7 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={connectWallet}
-          disabled={isConnecting}
+          disabled={isConnecting || isFrameBlocked}
           className={`btn-primary flex items-center space-x-2 ${sizeClasses[size]} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {isConnecting ? (
@@ -125,6 +130,53 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
               <span>{error}</span>
             </div>
             <span>Conectar Wallet</span>
+          </motion.div>
+        )}
+      </div>
+    );
+  }
+
+  if (needsAuth) {
+    return (
+      <div className={`space-y-2 ${className}`}>
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={signInWallet}
+          disabled={isAuthenticating || isFrameBlocked}
+          className={`btn-primary flex items-center justify-center space-x-2 ${sizeClasses[size]} disabled:opacity-50 disabled:cursor-not-allowed`}
+        >
+          {isAuthenticating ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+              <span>Signing in...</span>
+            </>
+          ) : (
+            <>
+              <Wallet className={iconSizes[size]} />
+              <span>Sign In</span>
+            </>
+          )}
+        </motion.button>
+
+        <button
+          onClick={disconnectWallet}
+          className={`btn-outline ${sizeClasses[size]} flex items-center justify-center space-x-2`}
+        >
+          <LogOut className={iconSizes[size]} />
+          <span>Disconnect</span>
+        </button>
+
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-center"
+          >
+            <div className="flex items-center space-x-2 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>{error}</span>
+            </div>
           </motion.div>
         )}
       </div>
@@ -163,7 +215,9 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
               </div>
               <div className="flex-1">
                 <div className="text-white font-semibold">Connected Wallet</div>
-                <div className="text-sm text-gray-400 font-mono">{formatAddress(address!)}</div>
+                <div className="text-xs text-gray-400 font-mono break-all leading-tight">
+                  {caip10Address}
+                </div>
               </div>
             </div>
 

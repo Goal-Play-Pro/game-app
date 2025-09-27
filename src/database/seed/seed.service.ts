@@ -6,6 +6,9 @@ import { ProductVariant } from '../entities/product-variant.entity';
 import { GachaPool } from '../entities/gacha-pool.entity';
 import { GachaPlayer } from '../entities/gacha-player.entity';
 import { GachaPoolEntry } from '../entities/gacha-pool-entry.entity';
+import { User } from '../entities/user.entity';
+import { Wallet } from '../entities/wallet.entity';
+import { formatCaip10 } from '../../common/utils/caip10.util';
 import { REAL_PLAYERS_DATA } from '../../data/players.data';
 
 @Injectable()
@@ -23,12 +26,17 @@ export class SeedService {
     private playerRepository: Repository<GachaPlayer>,
     @InjectRepository(GachaPoolEntry)
     private poolEntryRepository: Repository<GachaPoolEntry>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    @InjectRepository(Wallet)
+    private walletRepository: Repository<Wallet>,
   ) {}
 
   async seedDatabase() {
     this.logger.log('🌱 Starting database seeding...');
 
     try {
+      await this.backfillWalletIdentifiers();
       await this.seedProducts();
       await this.seedGachaPools();
       await this.seedGachaPlayers();
@@ -38,6 +46,72 @@ export class SeedService {
     } catch (error) {
       this.logger.error('❌ Database seeding failed:', error);
       throw error;
+    }
+  }
+
+  private getChainIdFromType(chainType?: string): number | undefined {
+    switch ((chainType || '').toLowerCase()) {
+      case 'ethereum':
+      case 'eth':
+        return 1;
+      case 'bsc':
+      case 'binance':
+        return 56;
+      case 'polygon':
+        return 137;
+      case 'arbitrum':
+        return 42161;
+      default:
+        return undefined;
+    }
+  }
+
+  private formatWalletCaip(chainType: string | undefined, address: string): string | undefined {
+    if (!address) {
+      return undefined;
+    }
+
+    const chainId = this.getChainIdFromType(chainType);
+    if (chainId !== undefined) {
+      try {
+        return formatCaip10(chainId, address);
+      } catch {
+        return undefined;
+      }
+    }
+
+    if ((chainType || '').toLowerCase() === 'solana') {
+      return `caip10:solana:mainnet:${address}`;
+    }
+
+    return undefined;
+  }
+
+  private async backfillWalletIdentifiers() {
+    const users = await this.userRepository.find();
+    let userUpdates = 0;
+    for (const user of users) {
+      const caip = this.formatWalletCaip(user.chain, user.walletAddress);
+      if (caip && user.walletAddressCaip10 !== caip) {
+        await this.userRepository.update(user.id, { walletAddressCaip10: caip });
+        userUpdates += 1;
+      }
+    }
+
+    const wallets = await this.walletRepository.find();
+    let walletUpdates = 0;
+    for (const wallet of wallets) {
+      const caip = this.formatWalletCaip(wallet.chainType, wallet.address);
+      if (caip && wallet.addressCaip10 !== caip) {
+        await this.walletRepository.update(wallet.id, { addressCaip10: caip });
+        walletUpdates += 1;
+      }
+    }
+
+    if (userUpdates > 0 || walletUpdates > 0) {
+      this.logger.log(`🔄 Backfilled CAIP-10 identifiers for ${userUpdates} users and ${walletUpdates} wallets.`);
+    } else {
+      this.logger.log('🔄 CAIP-10 identifiers already up to date.');
     }
   }
 

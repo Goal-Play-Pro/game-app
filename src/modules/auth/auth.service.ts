@@ -12,6 +12,8 @@ import { PublicKey } from '@solana/web3.js';
 import { AUTH_COOKIE_MAX_AGE_MS } from './auth.constants';
 import { LoggerService } from '../../common/services/logger.service';
 import { SecurityMetricsService } from '../../common/services/security-metrics.service';
+import { formatCaip10 } from '../../common/utils/caip10.util';
+import { domainToASCII } from 'node:url';
 
 interface AuthRequestContext {
   ip?: string;
@@ -32,7 +34,13 @@ export class AuthService {
     private challengeRepository: Repository<Challenge>,
   ) {}
 
-  async createSiweChallenge(address: string, chainId: number, statement: string) {
+  async createSiweChallenge(
+    address: string,
+    chainId: number,
+    statement?: string,
+    domainOverride?: string,
+    originOverride?: string,
+  ) {
     let checksumAddress: string;
     try {
       checksumAddress = getAddress(address);
@@ -43,7 +51,15 @@ export class AuthService {
     const nonce = this.generateSiweNonce();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    const message = this.buildSiweMessage(checksumAddress, chainId, statement, nonce, expiresAt);
+    const message = this.buildSiweMessage(
+      checksumAddress,
+      chainId,
+      statement ?? 'Sign in to Goal Play',
+      nonce,
+      expiresAt,
+      domainOverride,
+      originOverride,
+    );
 
     // Store challenge
     await this.challengeRepository.save({
@@ -68,6 +84,7 @@ export class AuthService {
     let challenge: Challenge | null = null;
     let user: User | null = null;
     let chainTypeFromMessage: string | undefined;
+    let parsedMessage: SiweMessage | null = null;
 
     try {
       const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
@@ -81,7 +98,6 @@ export class AuthService {
         throw new UnauthorizedException('Invalid message nonce');
       }
 
-      let parsedMessage: SiweMessage;
       try {
         parsedMessage = new SiweMessage(message);
       } catch {
@@ -94,11 +110,17 @@ export class AuthService {
 
       chainTypeFromMessage = this.getChainType(parsedMessage.chainId);
 
-      const isValid = await this.cryptoService.verifySiweSignature(message, signature, address);
+      const isValid = await this.cryptoService.verifySiweSignature(
+        message,
+        signature,
+        address,
+        parsedMessage.chainId,
+      );
       if (!isValid) {
+        const candidateCaip = this.safeFormatCaip10(parsedMessage.chainId, address);
         this.securityMetrics.recordLoginFailure({
           method: 'siwe',
-          wallet: address,
+          wallet: candidateCaip ?? address,
           ip: requestContext?.ip,
           chainType: chainTypeFromMessage,
         });
@@ -143,7 +165,12 @@ export class AuthService {
         throw new UnauthorizedException('Challenge not found or expired');
       }
 
+      if (!parsedMessage) {
+        throw new UnauthorizedException('Invalid SIWE message');
+      }
+
       const loginChainType = challenge.chainType ?? chainTypeFromMessage ?? this.getChainType(1);
+      const caip10 = formatCaip10(parsedMessage.chainId, address);
 
       user = await this.userRepository.findOne({
         where: { walletAddress: address }
@@ -152,6 +179,7 @@ export class AuthService {
       if (!user) {
         user = await this.userRepository.save({
           walletAddress: address,
+          walletAddressCaip10: caip10,
           chain: loginChainType,
           isActive: true,
           lastLogin: new Date(),
@@ -167,6 +195,7 @@ export class AuthService {
         const updatePayload: Partial<User> = {
           lastLogin: new Date(),
           isActive: true,
+          walletAddressCaip10: caip10,
         };
 
         if (user.chain !== loginChainType) {
@@ -188,6 +217,7 @@ export class AuthService {
       await this.logger.auditLog('auth.login.success', user.id, {
         method: 'siwe',
         wallet: address,
+        walletCaip10: caip10,
         chainType: loginChainType,
         challengeId: challenge.id,
         nonce,
@@ -195,7 +225,7 @@ export class AuthService {
 
       this.securityMetrics.recordLoginSuccess({
         method: 'siwe',
-        wallet: address,
+        wallet: caip10,
         ip: requestContext?.ip,
         chainType: loginChainType,
       });
@@ -204,20 +234,28 @@ export class AuthService {
         token,
         userId: user.id,
         primaryWallet: address,
+        primaryWalletCaip10: caip10,
         expiresInMs: this.sessionMaxAgeMs,
       };
     } catch (error) {
       const userId = user?.id ?? 'unknown';
+      const fallbackChainId =
+        parsedMessage?.chainId ??
+        (challenge?.chainType ? this.getChainIdFromType(challenge.chainType) : undefined) ??
+        (chainTypeFromMessage ? this.getChainIdFromType(chainTypeFromMessage) : undefined);
+      const failureCaip = this.safeFormatCaip10(fallbackChainId, address);
+
       await this.logger.auditLog('auth.login.failure', userId, {
         method: 'siwe',
         wallet: address,
+        walletCaip10: failureCaip,
         nonce: nonce || undefined,
         challengeId: challenge?.id,
         error: error instanceof Error ? error.message : String(error),
       });
       this.securityMetrics.recordLoginFailure({
         method: 'siwe',
-        wallet: address !== 'unknown' ? address : undefined,
+        wallet: failureCaip ?? (address !== 'unknown' ? address : undefined),
         ip: requestContext?.ip,
         chainType: challenge?.chainType ?? chainTypeFromMessage,
       });
@@ -270,13 +308,14 @@ export class AuthService {
 
     let challenge: Challenge | null = null;
     let user: User | null = null;
+    const solanaCaip10 = this.formatSolanaCaip10(normalizedKey);
 
     try {
       const isValid = await this.cryptoService.verifySolanaSignature(message, signature, normalizedKey);
       if (!isValid) {
         this.securityMetrics.recordLoginFailure({
           method: 'solana',
-          wallet: normalizedKey,
+          wallet: solanaCaip10,
           ip: requestContext?.ip,
           chainType: 'solana',
         });
@@ -304,6 +343,7 @@ export class AuthService {
       if (!user) {
         user = await this.userRepository.save({
           walletAddress: normalizedKey,
+          walletAddressCaip10: solanaCaip10,
           chain: 'solana',
           isActive: true,
           lastLogin: new Date(),
@@ -318,6 +358,7 @@ export class AuthService {
         await this.userRepository.update(user.id, {
           lastLogin: new Date(),
           isActive: true,
+          walletAddressCaip10: solanaCaip10,
         });
       }
 
@@ -332,6 +373,7 @@ export class AuthService {
       await this.logger.auditLog('auth.login.success', user.id, {
         method: 'solana',
         wallet: normalizedKey,
+        walletCaip10: solanaCaip10,
         chainType: 'solana',
         challengeId: challenge.id,
         nonce,
@@ -339,7 +381,7 @@ export class AuthService {
 
       this.securityMetrics.recordLoginSuccess({
         method: 'solana',
-        wallet: normalizedKey,
+        wallet: solanaCaip10,
         ip: requestContext?.ip,
         chainType: 'solana',
       });
@@ -348,6 +390,7 @@ export class AuthService {
         token,
         userId: user.id,
         primaryWallet: normalizedKey,
+        primaryWalletCaip10: solanaCaip10,
         expiresInMs: this.sessionMaxAgeMs,
       };
     } catch (error) {
@@ -355,13 +398,14 @@ export class AuthService {
       await this.logger.auditLog('auth.login.failure', userId, {
         method: 'solana',
         wallet: normalizedKey,
+        walletCaip10: solanaCaip10,
         nonce,
         challengeId: challenge?.id,
         error: error instanceof Error ? error.message : String(error),
       });
       this.securityMetrics.recordLoginFailure({
         method: 'solana',
-        wallet: normalizedKey,
+        wallet: solanaCaip10,
         ip: requestContext?.ip,
         chainType: 'solana',
       });
@@ -374,29 +418,74 @@ export class AuthService {
     return match ? match[1] : null;
   }
 
-  private buildSiweMessage(address: string, chainId: number, statement: string, nonce: string, expiresAt: Date): string {
-    const defaultUrl = process.env.NODE_ENV === 'production'
-      ? 'https://game.goalplay.pro'
-      : 'http://localhost:5173';
-
-    const baseUrl = process.env.FRONTEND_URL || defaultUrl;
-
-    let domain = 'game.goalplay.pro';
-    let origin = 'https://game.goalplay.pro';
-
-    try {
-      const normalizedUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
-      const parsed = new URL(normalizedUrl);
-      domain = parsed.host;
-      origin = parsed.origin;
-    } catch (error) {
-      console.warn('⚠️ Could not parse FRONTEND_URL, using defaults for SIWE message');
-    }
-
+  private buildSiweMessage(
+    address: string,
+    chainId: number,
+    statement: string,
+    nonce: string,
+    expiresAt: Date,
+    domainOverride?: string,
+    originOverride?: string,
+  ): string {
+    const { domain, origin } = this.resolveDomainAndOrigin(domainOverride, originOverride);
     const version = '1';
     const issuedAt = new Date().toISOString();
 
     return `${domain} wants you to sign in with your Ethereum account:\n${address}\n\n${statement}\n\nURI: ${origin}\nVersion: ${version}\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${expiresAt.toISOString()}`;
+  }
+
+  private resolveDomainAndOrigin(domainOverride?: string, originOverride?: string): { domain: string; origin: string } {
+    const defaultOrigin = process.env.NODE_ENV === 'production'
+      ? 'https://game.goalplay.pro'
+      : 'http://localhost:5173';
+    const baseOrigin = process.env.FRONTEND_URL || defaultOrigin;
+
+    const originCandidate = originOverride || (domainOverride ? `https://${domainOverride}` : baseOrigin);
+    const originUrl = this.safeParseUrl(originCandidate, defaultOrigin);
+    const asciiOriginHostname = domainToASCII(originUrl.hostname) || originUrl.hostname;
+    originUrl.hostname = asciiOriginHostname;
+
+    let domainCandidate = domainOverride;
+    if (!domainCandidate && originCandidate) {
+      domainCandidate = originUrl.host;
+    }
+
+    const domainUrl = this.safeParseUrl(domainCandidate ? `https://${domainCandidate}` : originUrl.origin, defaultOrigin);
+    const asciiDomainHostname = domainToASCII(domainUrl.hostname) || domainUrl.hostname;
+    domainUrl.hostname = asciiDomainHostname;
+
+    return {
+      domain: domainUrl.hostname,
+      origin: originUrl.origin,
+    };
+  }
+
+  private safeParseUrl(value: string | undefined, fallback: string): URL {
+    try {
+      if (!value) {
+        return new URL(fallback);
+      }
+
+      const normalized = value.startsWith('http') ? value : `https://${value}`;
+      return new URL(normalized);
+    } catch {
+      return new URL(fallback);
+    }
+  }
+
+  private safeFormatCaip10(chainId: number | undefined, address: string): string | undefined {
+    if (typeof chainId !== 'number') {
+      return undefined;
+    }
+    try {
+      return formatCaip10(chainId, address);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private formatSolanaCaip10(address: string): string {
+    return `caip10:solana:mainnet:${address}`;
   }
 
   private getChainType(chainId: number): string {
@@ -445,6 +534,7 @@ export class AuthService {
     return {
       id: user.id,
       walletAddress: user.walletAddress,
+      walletAddressCaip10: user.walletAddressCaip10,
       displayName: metadata.displayName || `Player${user.id.slice(0, 6)}`,
       bio: metadata.bio || 'Football gaming enthusiast',
       avatar: metadata.avatar || 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=300',

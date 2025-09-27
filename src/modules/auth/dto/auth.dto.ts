@@ -14,6 +14,16 @@ export class CreateSiweChallenge {
   @IsOptional()
   @IsString()
   statement?: string;
+
+  @ApiProperty({ description: 'Domain requesting the challenge', required: false })
+  @IsOptional()
+  @IsString()
+  domain?: string;
+
+  @ApiProperty({ description: 'Origin URL requesting the challenge', required: false })
+  @IsOptional()
+  @IsString()
+  origin?: string;
 }
 
 export class VerifySiweSignature {

@@ -15,6 +15,9 @@ export class User {
   @Column({ unique: true })
   walletAddress: string;
 
+  @Column({ unique: true, nullable: true })
+  walletAddressCaip10: string | null;
+
   @Column()
   chain: string;
 

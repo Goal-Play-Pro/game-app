@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PaymentService } from '../services/payment.service';
 import ApiService from '../services/api';
+import { getStoredWalletAddress } from '../utils/walletStorage';
 
 type PaymentProgressStatus = 'idle' | 'processing' | 'confirming' | 'completed';
 
@@ -118,7 +119,7 @@ export const usePayment = () => {
   const initiatePayment = async (orderId: string, receivingWallet: string, amount: string) => {
     try {
       // Obtener wallet del usuario
-      const userWallet = localStorage.getItem('walletAddress');
+      const userWallet = getStoredWalletAddress();
       if (!userWallet) {
         throw new Error('Please connect your wallet first');
       }

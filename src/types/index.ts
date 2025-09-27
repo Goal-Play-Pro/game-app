@@ -3,6 +3,7 @@
 export interface User {
   id: string;
   walletAddress: string;
+  walletAddressCaip10?: string;
   chain: string;
   isActive: boolean;
   lastLogin: Date;
@@ -22,6 +23,7 @@ export interface Wallet {
   id: string;
   userId: string;
   address: string;
+  addressCaip10?: string;
   chainType: ChainType;
   isPrimary: boolean;
   isActive: boolean;

@@ -1,5 +1,6 @@
 import { PaymentService } from '../payment.service';
 import { ethers } from 'ethers';
+import { PAYMENT_CONFIG } from '../../config/payment.config';
 
 type EthereumLike = {
   request: jest.Mock;
@@ -17,6 +18,8 @@ describe('PaymentService (frontend helpers)', () => {
   let mockContract: any;
   let browserProviderSpy: jest.SpyInstance;
   let contractSpy: jest.SpyInstance;
+
+  const originalGateway = PAYMENT_CONFIG.PAYMENT_GATEWAY_CONTRACT;
 
   beforeEach(() => {
     ethereum = {
@@ -41,6 +44,7 @@ describe('PaymentService (frontend helpers)', () => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
     global.window = originalWindow;
+    (PAYMENT_CONFIG as any).PAYMENT_GATEWAY_CONTRACT = originalGateway;
   });
 
   describe('isMetaMaskInstalled', () => {
@@ -103,6 +107,70 @@ describe('PaymentService (frontend helpers)', () => {
       expect(result.error).toBe('switch failed');
 
       switchSpy.mockRestore();
+    });
+  });
+
+  describe('processOrderPayment', () => {
+    const paymentGateway = '0x0000000000000000000000000000000000000001';
+
+    beforeEach(() => {
+      (PaymentService as any).PAYMENT_GATEWAY_CONTRACT = paymentGateway;
+    });
+
+    it('switches to BSC only when processing a payment', async () => {
+      const requests: string[] = [];
+
+      ethereum.request.mockImplementation(async ({ method }: { method: string }) => {
+        requests.push(method);
+        if (method === 'eth_accounts') {
+          return ['0xf39Fd6e51aad88F6f4ce6aB8827279cffFb92266'];
+        }
+        if (method === 'eth_chainId') {
+          return '0x1';
+        }
+        return null;
+      });
+
+      const switchSpy = jest
+        .spyOn(PaymentService as any, 'switchToBSC')
+        .mockImplementation(async () => {
+          requests.push('wallet_switchEthereumChain');
+        });
+
+      const signerMock = {};
+      browserProviderSpy.mockImplementation(() => ({
+        getSigner: jest.fn().mockResolvedValue(signerMock),
+      }));
+
+      const usdtContract = {
+        balanceOf: jest.fn().mockResolvedValue(ethers.parseUnits('10', 18)),
+        allowance: jest.fn().mockResolvedValue(ethers.parseUnits('10', 18)),
+      };
+
+      const gatewayContract = {
+        payOrder: jest.fn().mockResolvedValue({
+          hash: '0xhash',
+          wait: jest.fn().mockResolvedValue({ status: 1 }),
+        }),
+      };
+
+      const usdtAddress = (PaymentService as any).USDT_CONTRACT.toLowerCase();
+
+      contractSpy.mockImplementation((address: string) => {
+        if (address.toLowerCase() === usdtAddress) {
+          return usdtContract;
+        }
+        return gatewayContract;
+      });
+
+      expect(requests).toHaveLength(0);
+
+      const result = await PaymentService.processOrderPayment('order-1', paymentGateway, '1');
+
+      expect(result.success).toBe(true);
+      expect(switchSpy).toHaveBeenCalledTimes(1);
+      expect(requests.filter((method) => method === 'eth_accounts')).toHaveLength(1);
+      expect(requests).toContain('wallet_switchEthereumChain');
     });
   });
 

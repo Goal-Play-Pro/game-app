@@ -19,6 +19,7 @@ import {
 } from '../types';
 import { REAL_PLAYERS_DATA } from '../data/players.data';
 import { ReferralStatsDto, ReferralCodeDto } from '../types/referral';
+import { getStoredWallet } from '../utils/walletStorage';
 
 // Log de configuración inicial
 console.log('🚀 Goal Play Frontend iniciando...');
@@ -268,13 +269,14 @@ const getFallbackData = (endpoint: string, method: string, data?: any): any => {
       };
       
     case 'referral/my-code':
-      const referralWallet = localStorage.getItem('walletAddress');
-      if (referralWallet) {
-        const walletCode = referralWallet.slice(2, 8).toUpperCase() + 'REF';
+      const referralAccount = getStoredWallet();
+      if (referralAccount.address) {
+        const walletCode = referralAccount.address.slice(2, 8).toUpperCase() + 'REF';
         return {
           id: 'mock-code-1',
           userId: 'mock-user',
-          walletAddress: referralWallet,
+          walletAddress: referralAccount.address,
+          walletAddressCaip10: referralAccount.caip10,
           code: walletCode,
           isActive: true,
           totalReferrals: 0,
@@ -284,8 +286,8 @@ const getFallbackData = (endpoint: string, method: string, data?: any): any => {
       return null;
       
     case 'referral/stats':
-      const statsWallet = localStorage.getItem('walletAddress');
-      const referralCode = statsWallet ? statsWallet.slice(2, 8).toUpperCase() + 'REF' : 'DEMO123';
+      const statsAccount = getStoredWallet();
+      const referralCode = statsAccount.address ? statsAccount.address.slice(2, 8).toUpperCase() + 'REF' : 'DEMO123';
       return {
         totalReferrals: 0,
         activeReferrals: 0,
@@ -297,13 +299,15 @@ const getFallbackData = (endpoint: string, method: string, data?: any): any => {
         recentReferrals: [],
         recentCommissions: []
       };
-      
+
     case 'profile':
-      const profileWallet = localStorage.getItem('walletAddress');
+      const profileAccount = getStoredWallet();
+      const profileWallet = profileAccount.address;
       return {
         id: 'mock-user',
         walletAddress: profileWallet || '0x742d35Cc...',
-        displayName: `Player ${profileWallet?.slice(0, 6) || 'Demo'}`,
+        walletAddressCaip10: profileAccount.caip10,
+        displayName: `Player ${(profileWallet || 'Demo0000').slice(0, 6)}`,
         bio: 'Football gaming enthusiast',
         avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=300',
         preferences: {
@@ -576,11 +580,22 @@ export class ApiService {
 
   // AUTENTICACIÓN
   static async createSiweChallenge(address: string, chainId: number) {
-    return makeRequest('POST', '/auth/siwe/challenge', {
+    const payload: Record<string, unknown> = {
       address,
       chainId,
-      statement: 'Sign in to Goal Play'
-    });
+      statement: 'Sign in to Goal Play',
+    };
+
+    if (typeof window !== 'undefined') {
+      try {
+        payload.domain = window.location.host;
+        payload.origin = window.location.origin;
+      } catch (error) {
+        console.warn('⚠️ Unable to capture runtime origin for SIWE payload:', error);
+      }
+    }
+
+    return makeRequest('POST', '/auth/siwe/challenge', payload);
   }
 
   static async verifySiweSignature(message: string, signature: string) {
@@ -865,11 +880,12 @@ export class ApiService {
       return result;
     } catch (error) {
       console.warn('⚠️ Production API profile not available, using fallback wallet data');
-      const walletAddress = localStorage.getItem('walletAddress');
+      const { address: walletAddress, caip10 } = getStoredWallet();
       return {
         id: 'mock-user',
         walletAddress: walletAddress || '0x742d35Cc...',
-        displayName: `Player ${walletAddress?.slice(0, 6) || 'Demo'}`,
+        walletAddressCaip10: caip10,
+        displayName: `Player ${(walletAddress || 'Demo0000').slice(0, 6)}`,
         bio: 'Football gaming enthusiast',
         avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=300',
         preferences: {

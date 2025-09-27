@@ -7,16 +7,13 @@ import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class CryptoService {
-  private readonly ethereumProvider?: ethers.JsonRpcProvider;
+  private readonly providersByChainId = new Map<number, ethers.JsonRpcProvider>();
   private readonly erc1271Interface = new ethers.Interface([
     'function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)'
   ]);
 
   constructor(private readonly configService: ConfigService) {
-    const rpcUrl = this.configService.get<string>('ETH_RPC_URL');
-    if (rpcUrl) {
-      this.ethereumProvider = new ethers.JsonRpcProvider(rpcUrl);
-    }
+    this.initializeProviders();
   }
 
   /**
@@ -26,6 +23,7 @@ export class CryptoService {
     message: string,
     signature: string,
     address: string,
+    chainId?: number,
   ): Promise<boolean> {
     try {
       const recoveredAddress = ethers.verifyMessage(message, signature);
@@ -36,15 +34,20 @@ export class CryptoService {
       // continue with ERC-1271 fallback
     }
 
-    return this.verifyErc1271Signature(message, signature, address);
+    return this.verifyErc1271Signature(message, signature, address, chainId);
   }
 
   private async verifyErc1271Signature(
     message: string,
     signature: string,
     address: string,
+    chainId?: number,
   ): Promise<boolean> {
-    const provider = this.ethereumProvider;
+    if (!chainId) {
+      return false;
+    }
+
+    const provider = this.providersByChainId.get(chainId);
     if (!provider) {
       return false;
     }
@@ -67,6 +70,66 @@ export class CryptoService {
     } catch (error) {
       return false;
     }
+  }
+
+  private initializeProviders() {
+    const configs: Array<{ chainId: number; envKeys: string[]; fallback?: string; name: string }> = [
+      {
+        chainId: 1,
+        envKeys: ['ETH_RPC_URL', 'MAINNET_RPC_URL'],
+        fallback: 'https://cloudflare-eth.com',
+        name: 'ethereum',
+      },
+      {
+        chainId: 56,
+        envKeys: ['BSC_RPC_URL'],
+        fallback: 'https://bsc-dataseed1.binance.org/',
+        name: 'bsc',
+      },
+      {
+        chainId: 137,
+        envKeys: ['POLYGON_RPC_URL'],
+        fallback: 'https://polygon-rpc.com',
+        name: 'polygon',
+      },
+      {
+        chainId: 42161,
+        envKeys: ['ARB_RPC_URL', 'ARBITRUM_RPC_URL'],
+        fallback: 'https://arb1.arbitrum.io/rpc',
+        name: 'arbitrum',
+      },
+    ];
+
+    for (const config of configs) {
+      if (this.providersByChainId.has(config.chainId)) {
+        continue;
+      }
+
+      const url = this.resolveRpcUrl(config.envKeys, config.fallback);
+      if (!url) {
+        continue;
+      }
+
+      try {
+        const provider = new ethers.JsonRpcProvider(url, {
+          chainId: config.chainId,
+          name: config.name,
+        });
+        this.providersByChainId.set(config.chainId, provider);
+      } catch (error) {
+        // Ignore provider initialization errors and continue with other chains
+      }
+    }
+  }
+
+  private resolveRpcUrl(envKeys: string[], fallback?: string): string | undefined {
+    for (const key of envKeys) {
+      const value = this.configService.get<string>(key);
+      if (value && value.trim().length > 0) {
+        return value;
+      }
+    }
+    return fallback;
   }
 
   /**

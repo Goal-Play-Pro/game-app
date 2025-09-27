@@ -18,14 +18,17 @@ import ReferralLink from './ReferralLink';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { logWalletRequirement } from '../../utils/wallet.utils';
 import { shareContent } from '../../utils/share.utils';
+import { getStoredWallet } from '../../utils/walletStorage';
 
 const ReferralDashboard = () => {
   const [copySuccess, setCopySuccess] = useState(false);
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStatus();
 
-  const walletConnected = typeof window !== 'undefined' && localStorage.getItem('walletConnected') === 'true';
-  const walletAddress = typeof window !== 'undefined' ? localStorage.getItem('walletAddress') : null;
+  const storedWallet = getStoredWallet();
+  const walletConnected = storedWallet.isConnected;
+  const walletAddress = storedWallet.address;
+  const walletCaip10 = storedWallet.caip10;
 
   // Fetch referral stats
   const { data: referralStats, isLoading: statsLoading, error: statsError } = useQuery({
@@ -48,7 +51,8 @@ const ReferralDashboard = () => {
       console.log('🚀 Starting referral code creation via production API...');
       
       // Obtener wallet del usuario
-      const userWallet = localStorage.getItem('walletAddress');
+      const userWallet = walletAddress;
+      const userWalletCaip10 = walletCaip10;
       if (!userWallet) {
         throw new Error('No wallet connected. Please connect your wallet first.');
       }
@@ -73,6 +77,7 @@ const ReferralDashboard = () => {
           id: 'mock-code-new',
           userId: 'mock-user',
           walletAddress: userWallet,
+          walletAddressCaip10: userWalletCaip10,
           code: walletBasedCode,
           isActive: true,
           totalReferrals: 0,

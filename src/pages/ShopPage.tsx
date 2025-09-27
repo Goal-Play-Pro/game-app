@@ -10,6 +10,7 @@ import ProductCard from '../components/market/ProductCard';
 import PlayersGallery from '../components/player/PlayersGallery';
 import PaymentModal from '../components/payment/PaymentModal';
 import { ChainType } from '../types';
+import { getStoredWallet } from '../utils/walletStorage';
 import { useReferral } from '../hooks/useReferral';
 import { useAuthStatus } from '../hooks/useAuthStatus';
 
@@ -202,7 +203,7 @@ const ShopPage = () => {
     }
 
     // Get wallet address from localStorage
-    const connectedWallet = localStorage.getItem('walletAddress');
+    const { address: connectedWallet } = getStoredWallet();
     
     if (!connectedWallet) {
       alert('Please connect your wallet first!');

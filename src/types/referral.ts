@@ -2,6 +2,7 @@ export interface ReferralCodeDto {
   id: string;
   userId: string;
   walletAddress: string;
+  walletAddressCaip10?: string;
   code: string;
   isActive: boolean;
   totalReferrals: number;
@@ -14,8 +15,10 @@ export interface ReferralRegistrationDto {
   id: string;
   referrerUserId: string;
   referrerWallet: string;
+  referrerWalletCaip10?: string;
   referredUserId: string;
   referredWallet: string;
+  referredWalletCaip10?: string;
   referralCode: string;
   registeredAt: string;
   isActive: boolean;
@@ -27,8 +30,10 @@ export interface ReferralCommissionDto {
   id: string;
   referrerUserId: string;
   referrerWallet: string;
+  referrerWalletCaip10?: string;
   referredUserId: string;
   referredWallet: string;
+  referredWalletCaip10?: string;
   orderId: string;
   orderAmount: string;
   commissionAmount: string;

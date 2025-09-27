@@ -13,6 +13,9 @@ export class Wallet {
   @Column({ unique: true })
   address: string;
 
+  @Column({ unique: true, nullable: true })
+  addressCaip10: string | null;
+
   @Column()
   chainType: string;
 

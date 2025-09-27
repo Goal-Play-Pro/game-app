@@ -1,87 +1,153 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChainType } from '../types';
 import { useReferral } from './useReferral';
 import ApiService from '../services/api';
-import { API_CONFIG } from '../config/api.config';
+import { persistWallet, clearPersistedWallet, getStoredWallet } from '../utils/walletStorage';
+import { formatCaip10 } from '../utils/caip10';
 
 interface WalletState {
   isConnected: boolean;
   address: string | null;
+  caip10Address: string | null;
   chainId: number | null;
   chainType: ChainType | null;
   isConnecting: boolean;
+  isAuthenticating: boolean;
+  needsAuth: boolean;
   error: string | null;
+  isFrameBlocked: boolean;
 }
+
+const BSC_NETWORK = {
+  chainId: '0x38', // 56 in hex
+  chainName: 'BNB Smart Chain',
+  nativeCurrency: {
+    name: 'BNB',
+    symbol: 'BNB',
+    decimals: 18,
+  },
+  rpcUrls: ['https://bsc-dataseed1.binance.org/'],
+  blockExplorerUrls: ['https://bscscan.com/'],
+};
+
+const getChainType = (chainId: number): ChainType => {
+  switch (chainId) {
+    case 1:
+      return ChainType.ETHEREUM;
+    case 56:
+      return ChainType.BSC;
+    case 137:
+      return ChainType.POLYGON;
+    case 42161:
+      return ChainType.ARBITRUM;
+    default:
+      return ChainType.BSC;
+  }
+};
 
 export const useWallet = () => {
   const { registerPendingReferral } = useReferral();
-  const [walletState, setWalletState] = useState<WalletState>({
-    isConnected: false,
-    address: null,
-    chainId: null,
-    chainType: null,
-    isConnecting: false,
-    error: null,
+  const providerRef = useRef<any>(null);
+  const walletStateRef = useRef<WalletState | null>(null);
+  const isConnectingRef = useRef(false);
+  const isAuthenticatingRef = useRef(false);
+  const [walletState, setWalletState] = useState<WalletState>(() => {
+    const stored = getStoredWallet();
+    return {
+      isConnected: stored.isConnected,
+      address: stored.address,
+      caip10Address: stored.caip10,
+      chainId: stored.chainId,
+      chainType: stored.chainId ? getChainType(stored.chainId) : null,
+      isConnecting: false,
+      isAuthenticating: false,
+      needsAuth: stored.isConnected,
+      error: null,
+      isFrameBlocked: false,
+    };
   });
 
-  // BSC Network Configuration
-  const BSC_NETWORK = {
-    chainId: '0x38', // 56 in hex
-    chainName: 'BNB Smart Chain',
-    nativeCurrency: {
-      name: 'BNB',
-      symbol: 'BNB',
-      decimals: 18,
-    },
-    rpcUrls: ['https://bsc-dataseed1.binance.org/'],
-    blockExplorerUrls: ['https://bscscan.com/'],
-  };
+  walletStateRef.current = walletState;
 
-  const getChainType = (chainId: number): ChainType => {
-    switch (chainId) {
-      case 1: return ChainType.ETHEREUM;
-      case 137: return ChainType.POLYGON;
-      case 56: return ChainType.BSC;
-      case 42161: return ChainType.ARBITRUM;
-      default: return ChainType.BSC; // Default to BSC
-    }
-  };
-  
-  const getNetworkName = (chainId: number): string => {
-    switch (chainId) {
-      case 1: return 'Ethereum';
-      case 137: return 'Polygon';
-      case 56: return 'BSC';
-      case 42161: return 'Arbitrum';
-      default: return 'Unknown';
-    }
-  };
-
-  const persistWalletConnection = (address: string, chainIdNumber: number) => {
-    localStorage.setItem('walletConnected', 'true');
-    localStorage.setItem('walletAddress', address);
-    localStorage.setItem('walletChainId', chainIdNumber.toString());
-  };
-
-  const clearWalletPersistence = () => {
-    localStorage.removeItem('walletConnected');
-    localStorage.removeItem('walletAddress');
-    localStorage.removeItem('walletChainId');
-  };
-
-  const authenticateWallet = useCallback(async (address: string, chainIdNumber: number) => {
-    const ethereum = (window as any).ethereum;
-    if (!ethereum) {
-      throw new Error('Ethereum provider not available');
+  const guardProvider = useCallback((provider: any) => {
+    if (walletStateRef.current?.isFrameBlocked) {
+      return null;
     }
 
-    try {
+    if (!provider || provider.__goalplayGuarded) {
+      return provider;
+    }
+
+    const originalRequest = typeof provider.request === 'function' ? provider.request.bind(provider) : null;
+    if (!originalRequest) {
+      return provider;
+    }
+
+    const disallowedMethod = 'eth_sign';
+    const typedDataMethods = new Set([
+      'eth_signtypeddata',
+      'eth_signtypeddata_v1',
+      'eth_signtypeddata_v3',
+      'eth_signtypeddata_v4',
+    ]);
+
+    provider.request = async (...args: any[]) => {
+      const request = args[0];
+      const method = typeof request === 'string' ? request : request?.method;
+      const normalizedMethod = typeof method === 'string' ? method.toLowerCase() : '';
+
+      if (normalizedMethod === disallowedMethod) {
+        throw new Error('Direct eth_sign requests are blocked for security reasons.');
+      }
+
+      if (typedDataMethods.has(normalizedMethod)) {
+        const state = walletStateRef.current;
+        if (!state?.isConnected || state.needsAuth) {
+          throw new Error('Typed data signatures are only allowed after wallet authentication.');
+        }
+      }
+
+      return originalRequest(...args);
+    };
+
+    Object.defineProperty(provider, '__goalplayGuarded', {
+      configurable: false,
+      enumerable: false,
+      writable: false,
+      value: true,
+    });
+
+    return provider;
+  }, []);
+
+  const getProvider = useCallback(() => {
+    const rawProvider = providerRef.current ?? (typeof window !== 'undefined' ? (window as any).ethereum : null);
+    if (!rawProvider) {
+      return null;
+    }
+
+    const guarded = guardProvider(rawProvider);
+    providerRef.current = guarded;
+    return guarded;
+  }, [guardProvider]);
+
+  const setError = (message: string | null) => {
+    setWalletState((prev) => ({ ...prev, error: message }));
+  };
+
+  const authenticateWallet = useCallback(
+    async (address: string, chainIdNumber: number) => {
+      const provider = getProvider();
+      if (!provider) {
+        throw new Error('Ethereum provider not available');
+      }
+
       const challenge = await ApiService.createSiweChallenge(address, chainIdNumber);
       const message = challenge.message;
 
       let signature: string;
       try {
-        signature = await ethereum.request({
+        signature = await provider.request({
           method: 'personal_sign',
           params: [message, address],
         });
@@ -92,230 +158,255 @@ export const useWallet = () => {
         throw signError;
       }
 
-      const authResponse = await ApiService.verifySiweSignature(message, signature);
+      const verification = await ApiService.verifySiweSignature(message, signature);
+      const expectedCaip10 = formatCaip10(chainIdNumber, address);
+      if (verification?.primaryWalletCaip10 && verification.primaryWalletCaip10 !== expectedCaip10) {
+        throw new Error('Wallet mismatch between SIWE verification and connected account');
+      }
+
       ApiService.markSessionActive(true);
-      console.log('✅ Wallet authenticated via SIWE');
-
       await registerPendingReferral();
-      return authResponse;
-    } catch (error) {
-      ApiService.markSessionActive(false);
-      throw error;
-    }
-  }, [registerPendingReferral]);
+      return verification;
+    },
+    [getProvider, registerPendingReferral],
+  );
 
-  const checkConnection = useCallback(async () => {
-    const ethereum = (window as any).ethereum;
-    if (!ethereum) return;
-
-    try {
-      const accounts = await ethereum.request({ method: 'eth_accounts' });
-      if (accounts.length === 0) {
-        clearWalletPersistence();
-        if (ApiService.isAuthenticated()) {
-          ApiService.logout().catch(() => {});
-        }
-        ApiService.markSessionActive(false);
-        setWalletState({
-          isConnected: false,
-          address: null,
-          chainId: null,
-          chainType: null,
-          isConnecting: false,
-          error: null,
-        });
-        return;
-      }
-
-      const chainId = await ethereum.request({ method: 'eth_chainId' });
-      const chainIdNumber = parseInt(chainId, 16);
-      const hasSession = await ApiService.ensureSession();
-
-      if (hasSession) {
-        persistWalletConnection(accounts[0], chainIdNumber);
-        setWalletState({
-          isConnected: true,
-          address: accounts[0],
-          chainId: chainIdNumber,
-          chainType: getChainType(chainIdNumber),
-          isConnecting: false,
-          error: null,
-        });
-        return;
-      }
-
-      clearWalletPersistence();
-      ApiService.markSessionActive(false);
-      setWalletState({
-        isConnected: false,
-        address: null,
-        chainId: null,
-        chainType: null,
-        isConnecting: false,
-        error: 'Session expired. Click connect to authenticate again.',
-      });
-    } catch (error) {
-      console.error('Error checking wallet connection:', error);
-    }
+  const resetToDisconnected = useCallback((errorMessage?: string) => {
+    clearPersistedWallet();
+    ApiService.markSessionActive(false);
+    isConnectingRef.current = false;
+    isAuthenticatingRef.current = false;
+    setWalletState((prev) => ({
+      isConnected: false,
+      address: null,
+      caip10Address: null,
+      chainId: null,
+      chainType: null,
+      isConnecting: false,
+      isAuthenticating: false,
+      needsAuth: false,
+      error: errorMessage ?? null,
+      isFrameBlocked: prev.isFrameBlocked,
+    }));
   }, []);
 
-  const connectWallet = async () => {
-    const ethereum = (window as any).ethereum;
-    if (!ethereum) {
-      setWalletState(prev => ({
-        ...prev,
-        error: 'MetaMask is not installed. Please install MetaMask to continue.',
-      }));
+  const connectWallet = useCallback(async () => {
+    if (walletState.isFrameBlocked) {
+      setError('Wallet connections are disabled inside embedded frames.');
       return;
     }
 
-    setWalletState(prev => ({ ...prev, isConnecting: true, error: null }));
+    if (walletState.isConnecting || isConnectingRef.current) {
+      return;
+    }
+
+    const provider = getProvider();
+    if (!provider) {
+      setError('MetaMask is not installed. Please install MetaMask to continue.');
+      return;
+    }
+
+    isConnectingRef.current = true;
+    setWalletState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
     try {
-      // Request account access
-      const accounts = await ethereum.request({
-        method: 'eth_requestAccounts',
-      });
+      const accounts: string[] = await provider.request({ method: 'eth_requestAccounts' });
+      const chainIdHex: string = await provider.request({ method: 'eth_chainId' });
+      const chainIdNumber = Number.parseInt(chainIdHex, 16);
 
-      const chainId = await ethereum.request({ method: 'eth_chainId' });
-      const chainIdNumber = parseInt(chainId, 16);
-
-      try {
-        await authenticateWallet(accounts[0], chainIdNumber);
-        persistWalletConnection(accounts[0], chainIdNumber);
-
-        setWalletState({
-          isConnected: true,
-          address: accounts[0],
-          chainId: chainIdNumber,
-          chainType: getChainType(chainIdNumber),
-          isConnecting: false,
-          error: null,
-        });
-
-        console.log(`✅ Wallet connected: ${accounts[0]} on ${getNetworkName(chainIdNumber)}`);
-      } catch (authError: any) {
-        console.error('❌ Wallet authentication failed:', authError);
-        clearWalletPersistence();
-        if (ApiService.isAuthenticated()) {
-          ApiService.logout().catch(() => {});
-        }
-        ApiService.markSessionActive(false);
-        setWalletState({
-          isConnected: false,
-          address: null,
-          chainId: null,
-          chainType: null,
-          isConnecting: false,
-          error: authError?.message || 'Wallet authentication failed',
-        });
-      }
-
+      persistWallet(chainIdNumber, accounts[0]);
+      setWalletState((prev) => ({
+        isConnected: true,
+        address: accounts[0],
+        caip10Address: formatCaip10(chainIdNumber, accounts[0]),
+        chainId: chainIdNumber,
+        chainType: getChainType(chainIdNumber),
+        isConnecting: false,
+        isAuthenticating: false,
+        needsAuth: true,
+        error: null,
+        isFrameBlocked: prev.isFrameBlocked,
+      }));
+      console.log(`✅ Wallet connected: ${formatCaip10(chainIdNumber, accounts[0])}`);
     } catch (error: any) {
       console.error('Error connecting wallet:', error);
-      setWalletState(prev => ({
+      setWalletState((prev) => ({
         ...prev,
         isConnecting: false,
-        error: error.message || 'Failed to connect wallet',
+        error: error?.message ?? 'Failed to connect wallet',
       }));
+    } finally {
+      isConnectingRef.current = false;
     }
-  };
+  }, [getProvider, walletState.isConnecting, walletState.isFrameBlocked]);
+
+  const signInWallet = useCallback(async () => {
+    if (walletState.isFrameBlocked) {
+      setError('Wallet connections are disabled inside embedded frames.');
+      return;
+    }
+    if (!walletState.isConnected || !walletState.address || !walletState.chainId) {
+      setError('Connect your wallet before signing in.');
+      return;
+    }
+    if (walletState.isAuthenticating || isAuthenticatingRef.current) {
+      return;
+    }
+
+    isAuthenticatingRef.current = true;
+    setWalletState((prev) => ({ ...prev, isAuthenticating: true, error: null }));
+
+    try {
+      await authenticateWallet(walletState.address, walletState.chainId);
+      persistWallet(walletState.chainId, walletState.address);
+      setWalletState((prev) => ({
+        ...prev,
+        isAuthenticating: false,
+        needsAuth: false,
+        error: null,
+      }));
+    } catch (error: any) {
+      console.error('❌ Wallet authentication failed:', error);
+      setWalletState((prev) => ({
+        ...prev,
+        isAuthenticating: false,
+        needsAuth: true,
+        error: error?.message ?? 'Wallet authentication failed',
+      }));
+    } finally {
+      isAuthenticatingRef.current = false;
+    }
+  }, [authenticateWallet, walletState.address, walletState.chainId, walletState.isAuthenticating, walletState.isConnected, walletState.isFrameBlocked]);
 
   const disconnectWallet = useCallback(() => {
     if (ApiService.isAuthenticated()) {
       ApiService.logout().catch(() => {});
     }
-    ApiService.markSessionActive(false);
-    setWalletState({
-      isConnected: false,
-      address: null,
-      chainId: null,
-      chainType: null,
-      isConnecting: false,
-      error: null,
-    });
+    resetToDisconnected();
+  }, [resetToDisconnected]);
 
-    clearWalletPersistence();
-    
-    console.log('🔌 Wallet disconnected');
-  }, []);
-
-  const switchToNetwork = async (targetChainId: number) => {
-    const ethereum = (window as any).ethereum;
-    if (!ethereum) return;
+  const switchToNetwork = useCallback(async (targetChainId: number) => {
+    const provider = getProvider();
+    if (!provider) {
+      throw new Error('Ethereum provider not available');
+    }
 
     try {
-      await ethereum.request({
+      await provider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: `0x${targetChainId.toString(16)}` }],
       });
     } catch (error: any) {
-      if (error.code === 4902) {
-        // Network not added, add BSC as default
-        await ethereum.request({
+      if (error?.code === 4902) {
+        await provider.request({
           method: 'wallet_addEthereumChain',
           params: [BSC_NETWORK],
         });
+      } else {
+        throw error;
       }
-      throw error;
     }
-  };
+  }, [getProvider]);
 
-  // Listen for account and network changes
   useEffect(() => {
-    const ethereum = (window as any).ethereum;
-    if (!ethereum) return;
+    const provider = getProvider();
+    if (!provider) {
+      return;
+    }
 
     const handleAccountsChanged = async (accounts: string[]) => {
-      if (accounts.length === 0) {
+      if (!accounts.length) {
         disconnectWallet();
         return;
       }
 
-      clearWalletPersistence();
-      ApiService.markSessionActive(false);
-      setWalletState(prev => ({
+      let chainIdNumber = walletState.chainId ?? 56;
+      try {
+        const chainIdHex: string = await provider.request?.({ method: 'eth_chainId' });
+        if (chainIdHex) {
+          chainIdNumber = Number.parseInt(chainIdHex, 16);
+        }
+      } catch {
+        // ignore provider errors and fall back to previous chainId if available
+      }
+
+      persistWallet(chainIdNumber, accounts[0]);
+      setWalletState((prev) => ({
         ...prev,
-        isConnected: false,
-        address: null,
-        chainId: null,
-        chainType: null,
-        isConnecting: false,
-        error: 'Account changed. Please reconnect your wallet.',
+        address: accounts[0],
+        caip10Address: formatCaip10(chainIdNumber, accounts[0]),
+        chainId: chainIdNumber,
+        chainType: getChainType(chainIdNumber),
+        needsAuth: true,
+        error: 'Account changed. Please sign in again.',
       }));
+      ApiService.markSessionActive(false);
     };
 
-    const handleChainChanged = (chainId: string) => {
-      const chainIdNumber = parseInt(chainId, 16);
-      setWalletState(prev => ({
+    const handleChainChanged = (chainIdHex: string) => {
+      const chainIdNumber = Number.parseInt(chainIdHex, 16);
+      setWalletState((prev) => ({
         ...prev,
         chainId: chainIdNumber,
         chainType: getChainType(chainIdNumber),
+        needsAuth: prev.isConnected ? true : prev.needsAuth,
       }));
     };
 
-    ethereum.on?.('accountsChanged', handleAccountsChanged);
-    ethereum.on?.('chainChanged', handleChainChanged);
+    provider.on?.('accountsChanged', handleAccountsChanged);
+    provider.on?.('chainChanged', handleChainChanged);
 
     return () => {
-      if (ethereum) {
-        ethereum.removeListener?.('accountsChanged', handleAccountsChanged);
-        ethereum.removeListener?.('chainChanged', handleChainChanged);
+      provider.removeListener?.('accountsChanged', handleAccountsChanged);
+      provider.removeListener?.('chainChanged', handleChainChanged);
+    };
+  }, [disconnectWallet, getProvider, walletState.chainId, walletState.isConnected]);
+
+  useEffect(() => {
+    const handleProviderAnnouncement = (event: any) => {
+      if (event?.detail?.provider && !providerRef.current) {
+        providerRef.current = guardProvider(event.detail.provider);
       }
     };
-  }, [checkConnection, disconnectWallet]);
+
+    window.addEventListener('eip6963:announceProvider', handleProviderAnnouncement as EventListener);
+    window.dispatchEvent(new CustomEvent('eip6963:requestProvider'));
+
+    if ((window as any).ethereum && !providerRef.current) {
+      providerRef.current = guardProvider((window as any).ethereum);
+    }
+
+    return () => {
+      window.removeEventListener('eip6963:announceProvider', handleProviderAnnouncement as EventListener);
+    };
+  }, [guardProvider]);
+
+  useEffect(() => {
+    let framed = false;
+    if (typeof window !== 'undefined') {
+      try {
+        framed = window.self !== window.top;
+      } catch {
+        framed = true;
+      }
+    }
+
+    if (framed) {
+      setWalletState((prev) => ({
+        ...prev,
+        isFrameBlocked: true,
+        isConnecting: false,
+        isAuthenticating: false,
+        error: 'Wallet connections are disabled inside embedded frames.',
+      }));
+    }
+  }, []);
 
   return {
     ...walletState,
-    address: walletState.address,
-    chainId: walletState.chainId,
-    chainType: walletState.chainType,
-    isConnected: walletState.isConnected,
-    isConnecting: walletState.isConnecting,
-    error: walletState.error,
     connectWallet,
+    signInWallet,
     disconnectWallet,
     switchToNetwork,
-    checkConnection,
   };
 };

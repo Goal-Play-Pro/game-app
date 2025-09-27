@@ -9,7 +9,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { User } from '../../database/entities/user.entity';
 import { Challenge } from '../../database/entities/challenge.entity';
 import { SecurityMetricsController } from './security-metrics.controller';
-import { resolveJwtSecret } from '../../common/config/jwt.config';
+import { resolveJwtConfig } from '../../common/config/jwt.config';
 
 @Module({
   imports: [
@@ -17,10 +17,19 @@ import { resolveJwtSecret } from '../../common/config/jwt.config';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
-        secret: resolveJwtSecret(configService),
-        signOptions: { expiresIn: '1h' },
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const jwtConfig = resolveJwtConfig(configService);
+        return {
+          secret: jwtConfig.current.secret,
+          signOptions: {
+            algorithm: jwtConfig.algorithm,
+            audience: jwtConfig.audience,
+            issuer: jwtConfig.issuer,
+            expiresIn: jwtConfig.expiresIn,
+            keyid: jwtConfig.current.kid,
+          },
+        };
+      },
     }),
   ],
   controllers: [AuthController, SecurityMetricsController],

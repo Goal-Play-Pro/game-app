@@ -20,8 +20,31 @@ export class AuthController {
   @Post('siwe/challenge')
   @ApiOperation({ summary: 'Create SIWE challenge for Ethereum authentication' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Challenge created successfully' })
-  async createSiweChallenge(@Body() dto: CreateSiweChallenge) {
-    return this.authService.createSiweChallenge(dto.address, dto.chainId, dto.statement);
+  async createSiweChallenge(@Body() dto: CreateSiweChallenge, @Request() req: any) {
+    const coerceHeader = (value: string | string[] | undefined): string | undefined => {
+      if (!value) {
+        return undefined;
+      }
+      return Array.isArray(value) ? value[0] : value;
+    };
+
+    const sanitizeHeader = (value?: string) => (value ? value.split(',')[0].trim() : undefined);
+
+    const forwardedHost = sanitizeHeader(coerceHeader(req?.headers?.['x-forwarded-host']));
+    const hostHeader = sanitizeHeader(coerceHeader(req?.headers?.host));
+    const originHeader = sanitizeHeader(coerceHeader(req?.headers?.origin));
+    const refererHeader = sanitizeHeader(coerceHeader(req?.headers?.referer));
+
+    const effectiveDomain = forwardedHost || hostHeader || dto.domain;
+    const effectiveOrigin = originHeader || refererHeader || dto.origin;
+
+    return this.authService.createSiweChallenge(
+      dto.address,
+      dto.chainId,
+      dto.statement,
+      effectiveDomain,
+      effectiveOrigin,
+    );
   }
 
   @Post('siwe/verify')
@@ -33,6 +56,7 @@ export class AuthController {
     return {
       userId: result.userId,
       primaryWallet: result.primaryWallet,
+      primaryWalletCaip10: result.primaryWalletCaip10,
       expiresInMs: result.expiresInMs,
     };
   }
@@ -53,6 +77,7 @@ export class AuthController {
     return {
       userId: result.userId,
       primaryWallet: result.primaryWallet,
+      primaryWalletCaip10: result.primaryWalletCaip10,
       expiresInMs: result.expiresInMs,
     };
   }

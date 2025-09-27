@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, 
@@ -15,6 +15,7 @@ import { usePayment } from '../../hooks/usePayment';
 import { useWallet } from '../../hooks/useWallet';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { PAYMENT_CONFIG } from '../../config/payment.config';
+import { ChainType } from '../../types';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -28,13 +29,36 @@ interface PaymentModalProps {
 }
 
 const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
-  const [step, setStep] = useState<'connect' | 'balance' | 'confirm' | 'processing' | 'confirming' | 'success' | 'error'>('connect');
+  const [step, setStep] = useState<
+    | 'connect'
+    | 'auth'
+    | 'network'
+    | 'balance'
+    | 'confirm'
+    | 'processing'
+    | 'confirming'
+    | 'success'
+    | 'error'
+  >('connect');
   const [usdtBalance, setUsdtBalance] = useState<string>('0.00');
   const [gasEstimate, setGasEstimate] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
+  const [networkError, setNetworkError] = useState<string | null>(null);
   const gatewayContract = PAYMENT_CONFIG.PAYMENT_GATEWAY_CONTRACT;
 
-  const { address, isConnected, connectWallet } = useWallet();
+  const {
+    address,
+    isConnected,
+    needsAuth,
+    isConnecting,
+    isAuthenticating,
+    connectWallet,
+    signInWallet,
+    chainId,
+    chainType,
+    switchToNetwork,
+  } = useWallet();
   const {
     initiatePayment,
     checkUSDTBalance,
@@ -49,6 +73,36 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
     requiredConfirmations,
     fetchPaymentStatus,
   } = usePayment();
+
+  const TARGET_CHAIN_ID = 56;
+
+  const loadBalanceAndGas = useCallback(async () => {
+    if (!address || needsAuth) return;
+
+    try {
+      const balance = await checkUSDTBalance(address);
+      setUsdtBalance(balance.formatted);
+
+      const gas = await estimateGasCosts(order.receivingWallet, order.totalPriceUSDT, address);
+      setGasEstimate(gas);
+
+      if (parseFloat(balance.formatted) >= parseFloat(order.totalPriceUSDT)) {
+        setStep('confirm');
+      } else {
+        setStep('balance');
+      }
+    } catch (error) {
+      console.error('Error loading balance and gas:', error);
+      setStep('error');
+    }
+  }, [
+    address,
+    needsAuth,
+    checkUSDTBalance,
+    estimateGasCosts,
+    order.receivingWallet,
+    order.totalPriceUSDT,
+  ]);
 
   // Countdown timer
   useEffect(() => {
@@ -66,15 +120,39 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
     return () => clearInterval(interval);
   }, [isOpen, order.expiresAt]);
 
-  // Check wallet connection and balance
+  // Check wallet connection, authentication, and network
   useEffect(() => {
-    if (isOpen && isConnected && address) {
+    if (!isOpen) {
+      return;
+    }
+
+    if (!isConnected || !address) {
+      setStep('connect');
+      return;
+    }
+
+    if (needsAuth) {
+      setStep('auth');
+      return;
+    }
+
+    if (chainId === null || chainId === undefined || chainId !== TARGET_CHAIN_ID) {
+      setStep('network');
+      return;
+    }
+
+    if (!['balance', 'confirm', 'processing', 'confirming', 'success'].includes(step)) {
       setStep('balance');
       loadBalanceAndGas();
-    } else if (isOpen && !isConnected) {
-      setStep('connect');
     }
-  }, [isOpen, isConnected, address]);
+  }, [isOpen, isConnected, needsAuth, address, chainId, loadBalanceAndGas, step]);
+
+  useEffect(() => {
+    if (chainId === TARGET_CHAIN_ID) {
+      setNetworkError(null);
+      setIsSwitchingNetwork(false);
+    }
+  }, [chainId]);
 
   // Monitor payment state
   useEffect(() => {
@@ -124,34 +202,32 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
     };
   }, [isOpen, status, order.id, fetchPaymentStatus]);
 
-  const loadBalanceAndGas = async () => {
-    if (!address) return;
-
-    try {
-      // Cargar balance USDT
-      const balance = await checkUSDTBalance(address);
-      setUsdtBalance(balance.formatted);
-
-      // Estimar gas
-      const gas = await estimateGasCosts(order.receivingWallet, order.totalPriceUSDT, address);
-      setGasEstimate(gas);
-
-      // Verificar si tiene suficiente balance
-      if (parseFloat(balance.formatted) >= parseFloat(order.totalPriceUSDT)) {
-        setStep('confirm');
-      } else {
-        setStep('balance');
-      }
-    } catch (error) {
-      console.error('Error loading balance and gas:', error);
-      setStep('error');
-    }
-  };
-
   const handlePayment = async () => {
-    if (!address) return;
+    if (!address || needsAuth) return;
+    if (chainId !== TARGET_CHAIN_ID) {
+      setStep('network');
+      return;
+    }
     
     await initiatePayment(order.id, order.receivingWallet, order.totalPriceUSDT);
+  };
+
+  const handleSwitchNetwork = async () => {
+    if (!switchToNetwork) {
+      return;
+    }
+
+    setNetworkError(null);
+    setIsSwitchingNetwork(true);
+    try {
+      await switchToNetwork(TARGET_CHAIN_ID);
+    } catch (error: any) {
+      console.error('Failed to switch network:', error);
+      const message = error?.message || 'Failed to switch network. Please approve the request in MetaMask.';
+      setNetworkError(message);
+    } finally {
+      setIsSwitchingNetwork(false);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -218,6 +294,8 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
   const handleClose = () => {
     resetPaymentState();
     setStep('connect');
+    setNetworkError(null);
+    setIsSwitchingNetwork(false);
     onClose();
   };
 
@@ -293,10 +371,56 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                   <p className="text-gray-400 mb-6">Connect MetaMask to proceed with payment</p>
                   <button
                     onClick={connectWallet}
-                    className="btn-primary w-full"
+                    className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isConnecting}
                   >
-                    Connect MetaMask
+                    {isConnecting ? 'Connecting...' : 'Connect MetaMask'}
                   </button>
+                </motion.div>
+              )}
+
+              {step === 'auth' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-center"
+                >
+                  <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Wallet className="w-8 h-8 text-yellow-400" />
+                  </div>
+                  <h4 className="text-lg font-semibold text-white mb-2">Sign In Required</h4>
+                  <p className="text-gray-400 mb-6">Approve the signature request to authenticate this session.</p>
+                  <button
+                    onClick={signInWallet}
+                    className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isAuthenticating}
+                  >
+                    {isAuthenticating ? 'Waiting for Signature...' : 'Sign In'}
+                  </button>
+                </motion.div>
+              )}
+
+              {step === 'network' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-center"
+                >
+                  <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Wallet className="w-8 h-8 text-blue-400" />
+                  </div>
+                  <h4 className="text-lg font-semibold text-white mb-2">BNB Smart Chain Required</h4>
+                  <p className="text-gray-400 mb-6">
+                    You are connected to {chainType === ChainType.BSC ? 'BNB Smart Chain' : 'a different network'}. Switch to BNB Smart Chain before continuing.
+                  </p>
+                  <button
+                    onClick={handleSwitchNetwork}
+                    disabled={isSwitchingNetwork}
+                    className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSwitchingNetwork ? 'Switching...' : 'Switch to BNB Smart Chain'}
+                  </button>
+                  {networkError && <p className="mt-4 text-sm text-red-400">{networkError}</p>}
                 </motion.div>
               )}
 

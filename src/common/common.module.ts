@@ -6,7 +6,7 @@ import { CryptoService } from './services/crypto.service';
 import { LoggerService } from './services/logger.service';
 import { SecurityMetricsService } from './services/security-metrics.service';
 import { IdempotencyService } from './services/idempotency.service';
-import { resolveJwtSecret } from './config/jwt.config';
+import { resolveJwtConfig } from './config/jwt.config';
 
 @Global()
 @Module({
@@ -18,10 +18,19 @@ import { resolveJwtSecret } from './config/jwt.config';
     }),
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
-        secret: resolveJwtSecret(configService),
-        signOptions: { expiresIn: '1h' },
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const jwtConfig = resolveJwtConfig(configService);
+        return {
+          secret: jwtConfig.current.secret,
+          signOptions: {
+            algorithm: jwtConfig.algorithm,
+            audience: jwtConfig.audience,
+            issuer: jwtConfig.issuer,
+            expiresIn: jwtConfig.expiresIn,
+            keyid: jwtConfig.current.kid,
+          },
+        };
+      },
     }),
   ],
   providers: [

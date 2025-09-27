@@ -16,33 +16,13 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import { ChainType } from '../../types';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { logWalletRequirement } from '../../utils/wallet.utils';
-
-const getWalletPersistence = () => {
-  if (typeof window === 'undefined') {
-    return {
-      connected: false,
-      address: null as string | null,
-    };
-  }
-
-  try {
-    return {
-      connected: localStorage.getItem('walletConnected') === 'true',
-      address: localStorage.getItem('walletAddress'),
-    };
-  } catch {
-    return {
-      connected: false,
-      address: null,
-    };
-  }
-};
+import { getStoredWallet } from '../../utils/walletStorage';
 
 const WalletManager = () => {
   const [isLinking, setIsLinking] = useState(false);
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStatus();
-  const { connected: walletConnected, address: walletAddress } = getWalletPersistence();
+  const { isConnected: walletConnected, address: walletAddress } = getStoredWallet();
 
   // Fetch user wallets
   const { data: wallets, isLoading: walletsLoading } = useQuery({

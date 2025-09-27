@@ -28,6 +28,7 @@ import { useAuthStatus } from '../hooks/useAuthStatus';
 
 import { shareContent, showCopyNotification } from '../utils/share.utils';
 import { logWalletRequirement } from '../utils/wallet.utils';
+import { getStoredWallet } from '../utils/walletStorage';
 
 const ProfilePage = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'referrals' | 'wallets' | 'history' | 'settings'>(() => {
@@ -41,8 +42,10 @@ const ProfilePage = () => {
   const queryClient = useQueryClient();
 
   // Get real user wallet address
-  const connectedWalletAddress = localStorage.getItem('walletAddress');
-  const isWalletConnected = localStorage.getItem('walletConnected') === 'true';
+  const storedWallet = getStoredWallet();
+  const connectedWalletAddress = storedWallet.address;
+  const connectedWalletCaip10 = storedWallet.caip10;
+  const isWalletConnected = storedWallet.isConnected;
 
   useEffect(() => {
     if (!isWalletConnected || !connectedWalletAddress) {
@@ -59,6 +62,7 @@ const ProfilePage = () => {
     banner: 'https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg?auto=compress&cs=tinysrgb&w=1200',
     bio: 'Passionate football gamer and NFT collector. Master of penalty shootouts.',
     walletAddress: connectedWalletAddress || '0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000',
+    walletAddressCaip10: connectedWalletCaip10,
     isVerified: true,
     joinedAt: '2024-01-15',
     level: 25,

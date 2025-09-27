@@ -7,6 +7,7 @@ import { User } from '../../database/entities/user.entity';
 import { Challenge } from '../../database/entities/challenge.entity';
 import { LoggerService } from '../../common/services/logger.service';
 import { SecurityMetricsService } from '../../common/services/security-metrics.service';
+import { formatCaip10 } from '../../common/utils/caip10.util';
 
 describe('AuthService.verifySiweSignature', () => {
   const checksumAddress = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
@@ -148,16 +149,24 @@ describe('AuthService.verifySiweSignature', () => {
     users.findOne.mockResolvedValue({ id: 'user-1', walletAddress: normalizedAddress, chain: 'ethereum', isActive: true } as User);
 
     const result = await service.verifySiweSignature(message, '0xsignature', { ip: '127.0.0.1' });
+    const expectedCaip = formatCaip10(1, normalizedAddress);
+
+    expect(crypto.verifySiweSignature).toHaveBeenCalledWith(
+      message,
+      '0xsignature',
+      normalizedAddress,
+      1,
+    );
 
     expect(challenges.update).toHaveBeenCalledWith({ id: '1', used: false }, { used: true });
-    expect(result).toEqual(expect.objectContaining({ token: 'token', primaryWallet: normalizedAddress }));
+    expect(result).toEqual(expect.objectContaining({ token: 'token', primaryWallet: normalizedAddress, primaryWalletCaip10: expectedCaip }));
     expect(logger.auditLog).toHaveBeenCalledWith(
       'auth.login.success',
       'user-1',
       expect.objectContaining({ method: 'siwe', wallet: normalizedAddress }),
     );
     expect(metrics.recordLoginSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({ method: 'siwe', wallet: normalizedAddress, ip: '127.0.0.1' }),
+      expect.objectContaining({ method: 'siwe', wallet: expectedCaip, ip: '127.0.0.1' }),
     );
   });
 
@@ -192,11 +201,19 @@ describe('AuthService.verifySiweSignature', () => {
     } as User);
 
     await service.verifySiweSignature(bscMessage, '0xsignature');
+    const expectedCaip = formatCaip10(56, normalizedAddress);
 
-    expect(users.save).toHaveBeenCalledWith(expect.objectContaining({ chain: 'bsc' }));
+    expect(crypto.verifySiweSignature).toHaveBeenCalledWith(
+      bscMessage,
+      '0xsignature',
+      normalizedAddress,
+      56,
+    );
+
+    expect(users.save).toHaveBeenCalledWith(expect.objectContaining({ chain: 'bsc', walletAddressCaip10: expectedCaip }));
     expect(jwt.sign).toHaveBeenCalledWith(expect.objectContaining({ chainType: 'bsc' }));
     expect(metrics.recordLoginSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({ method: 'siwe', wallet: normalizedAddress, chainType: 'bsc' }),
+      expect.objectContaining({ method: 'siwe', wallet: expectedCaip, chainType: 'bsc' }),
     );
   });
 
@@ -206,13 +223,14 @@ describe('AuthService.verifySiweSignature', () => {
     crypto.verifySiweSignature.mockResolvedValue(false);
 
     await expect(service.verifySiweSignature(message, '0xsignature', { ip: '127.0.0.1' })).rejects.toBeInstanceOf(UnauthorizedException);
+    const expectedCaip = formatCaip10(1, normalizedAddress);
     expect(logger.auditLog).toHaveBeenCalledWith(
       'auth.login.failure',
       'unknown',
       expect.objectContaining({ method: 'siwe', wallet: normalizedAddress }),
     );
     expect(metrics.recordLoginFailure).toHaveBeenCalledWith(
-      expect.objectContaining({ method: 'siwe', wallet: normalizedAddress, ip: '127.0.0.1' }),
+      expect.objectContaining({ method: 'siwe', wallet: expectedCaip, ip: '127.0.0.1' }),
     );
   });
 });
@@ -300,7 +318,8 @@ describe('AuthService.verifySolanaSignature', () => {
     const result = await service.verifySolanaSignature(message, 'base64signature', solanaPublicKey, { ip: '127.0.0.2' });
 
     expect(crypto.verifySolanaSignature).toHaveBeenCalledWith(message, 'base64signature', solanaPublicKey);
-    expect(result).toEqual(expect.objectContaining({ token: 'token', primaryWallet: solanaPublicKey }));
+    const expectedCaip = `caip10:solana:mainnet:${solanaPublicKey}`;
+    expect(result).toEqual(expect.objectContaining({ token: 'token', primaryWallet: solanaPublicKey, primaryWalletCaip10: expectedCaip }));
     expect(storedChallenges.get(nonce)?.used).toBe(true);
     expect(logger.auditLog).toHaveBeenCalledWith(
       'auth.login.success',
@@ -308,7 +327,7 @@ describe('AuthService.verifySolanaSignature', () => {
       expect.objectContaining({ method: 'solana', wallet: solanaPublicKey }),
     );
     expect(metrics.recordLoginSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({ method: 'solana', wallet: solanaPublicKey, ip: '127.0.0.2' }),
+      expect.objectContaining({ method: 'solana', wallet: expectedCaip, ip: '127.0.0.2' }),
     );
   });
 
@@ -319,13 +338,14 @@ describe('AuthService.verifySolanaSignature', () => {
     await expect(
       service.verifySolanaSignature(message, 'invalid', solanaPublicKey, { ip: '127.0.0.2' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+    const expectedCaip = `caip10:solana:mainnet:${solanaPublicKey}`;
     expect(logger.auditLog).toHaveBeenCalledWith(
       'auth.login.failure',
       'unknown',
       expect.objectContaining({ method: 'solana', wallet: solanaPublicKey }),
     );
     expect(metrics.recordLoginFailure).toHaveBeenCalledWith(
-      expect.objectContaining({ method: 'solana', wallet: solanaPublicKey, ip: '127.0.0.2' }),
+      expect.objectContaining({ method: 'solana', wallet: expectedCaip, ip: '127.0.0.2' }),
     );
   });
 

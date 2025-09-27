@@ -68,10 +68,10 @@ describe('CryptoService.verifySiweSignature', () => {
       }),
     } as unknown as ethers.JsonRpcProvider;
 
-    (service as any).ethereumProvider = providerMock;
+    (service as any).providersByChainId.set(1, providerMock);
 
     await expect(
-      service.verifySiweSignature(message, signature, contractAddress),
+      service.verifySiweSignature(message, signature, contractAddress, 1),
     ).resolves.toBe(true);
   });
 
@@ -87,10 +87,10 @@ describe('CryptoService.verifySiweSignature', () => {
       call: jest.fn().mockResolvedValue('0x00000000'),
     } as unknown as ethers.JsonRpcProvider;
 
-    (service as any).ethereumProvider = providerMock;
+    (service as any).providersByChainId.set(1, providerMock);
 
     await expect(
-      service.verifySiweSignature(message, signature, contractAddress),
+      service.verifySiweSignature(message, signature, contractAddress, 1),
     ).resolves.toBe(false);
   });
 });
