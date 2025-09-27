@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { configureApp } from '../src/app.setup';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -19,6 +20,7 @@ describe('Security headers (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    await configureApp(app);
     await app.init();
   });
 
