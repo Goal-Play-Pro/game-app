@@ -55,7 +55,7 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
     address: '0x1e2ceb5d2b4ed8077456277ba5309f950aef2ce4',
     symbol: 'GOAL',
     decimals: 7,
-    image: 'https://photos.pinksale.finance/file/pinksale-logo-upload/1757174953372-9634c48090be099c9daecc972d29f028.png'
+    image: '/assets/goalplay-icon.png'
   };
 
   const copyTokenDetails = async () => {

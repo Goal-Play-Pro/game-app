@@ -66,7 +66,7 @@ export const configureApp = async (app: INestApplication): Promise<ConfigureResu
   const cspDirectives: Record<string, CSPDirective> = {
     "default-src": ["'self'"],
     "object-src": ["'none'"],
-    "img-src": ["'self'", 'data:', 'https://photos.pinksale.finance'],
+    "img-src": ["'self'", 'data:'],
     "style-src": ["'self'"],
     "font-src": ["'self'"],
     "base-uri": ["'self'"],
@@ -151,4 +151,3 @@ export const configureApp = async (app: INestApplication): Promise<ConfigureResu
     corsOrigins: Array.from(corsOrigins),
   };
 };
-

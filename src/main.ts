@@ -6,6 +6,9 @@ import { AppModule } from './app.module';
 import { SeedService } from './database/seed/seed.service';
 import { configureApp } from './app.setup';
 
+const SWAGGER_FAVICON_DATA_URL =
+  "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2032%2032%27%3E%3Crect%20width%3D%2732%27%20height%3D%2732%27%20rx%3D%276%27%20fill%3D%27%2300b894%27/%3E%3Ctext%20x%3D%2716%27%20y%3D%2721%27%20font-size%3D%2718%27%20font-family%3D%27Arial%2C%20sans-serif%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3EG%3C/text%3E%3C/svg%3E";
+
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   
@@ -40,7 +43,7 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document, {
       customSiteTitle: 'Goal Play API Documentation',
-      customfavIcon: 'https://photos.pinksale.finance/file/pinksale-logo-upload/1756173488726-1bb87d41d15fe27b500a4bfcde01bb0e.png',
+      customfavIcon: SWAGGER_FAVICON_DATA_URL,
     });
     await app.listen(port);
     // Seed database on startup

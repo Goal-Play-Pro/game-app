@@ -185,7 +185,7 @@ const Footer = () => {
           <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 mb-4 sm:mb-0">
             <Link to="/" className="flex items-center space-x-2 sm:space-x-3">
               <img
-                src="https://photos.pinksale.finance/file/pinksale-logo-upload/1756173488726-1bb87d41d15fe27b500a4bfcde01bb0e.png"
+                src="/assets/goalplay-icon.png"
                 alt="Goal Play Logo"
                 className="h-6 sm:h-8 w-auto object-contain"
                 onError={(e) => {

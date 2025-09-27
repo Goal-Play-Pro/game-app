@@ -55,14 +55,14 @@ const Header = () => {
               whileTap={{ scale: 0.95 }}
             >
               <img
-               src="https://photos.pinksale.finance/file/pinksale-logo-upload/1756173488726-1bb87d41d15fe27b500a4bfcde01bb0e.png"
+                src="/assets/goalplay-icon.png"
                 alt="Goal Play Logo"
-               className="h-8 sm:h-10 w-auto object-contain"
+                className="h-8 sm:h-10 w-auto object-contain"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
-                 target.style.display = 'none';
-                 const fallback = target.nextElementSibling as HTMLElement;
-                 if (fallback) fallback.style.display = 'flex';
+                  target.style.display = 'none';
+                  const fallback = target.nextElementSibling as HTMLElement;
+                  if (fallback) fallback.style.display = 'flex';
                 }}
               />
              <div className="hidden h-8 sm:h-10 w-8 sm:w-10 bg-gradient-to-r from-football-green to-football-blue rounded-lg items-center justify-center">
