@@ -1,14 +1,15 @@
 import { ConfigService } from '@nestjs/config';
-import type { Algorithm } from 'jsonwebtoken';
+
+type HmacAlgorithm = 'HS256' | 'HS384' | 'HS512';
 
 const MIN_SECRET_LENGTH = 32;
-const DEFAULT_ALGORITHM: Algorithm = 'HS512';
+const DEFAULT_ALGORITHM: HmacAlgorithm = 'HS512';
 const DEFAULT_EXPIRES_IN = '1h';
 const DEFAULT_AUDIENCE = 'goal-play-users';
 const DEFAULT_ISSUER = 'goal-play-api';
 const DEFAULT_CLOCK_TOLERANCE_SECONDS = 30;
 
-const SUPPORTED_HMAC_ALGORITHMS = new Set<Algorithm>(['HS256', 'HS384', 'HS512']);
+const SUPPORTED_HMAC_ALGORITHMS = new Set<HmacAlgorithm>(['HS256', 'HS384', 'HS512']);
 
 export const JWT_SECRET_CONFIG_KEY = 'JWT_SECRET';
 export const JWT_SECRET_CURRENT_CONFIG_KEY = 'JWT_SECRET_CURRENT';
@@ -27,7 +28,7 @@ export interface JwtKeyConfig {
 }
 
 export interface ResolvedJwtConfig {
-  algorithm: Algorithm;
+  algorithm: HmacAlgorithm;
   expiresIn: string;
   audience: string;
   issuer: string;
@@ -50,8 +51,8 @@ const coerceKid = (value: string | undefined, fallback: string): string => {
   return trimmed && trimmed.length > 0 ? trimmed : fallback;
 };
 
-const resolveAlgorithm = (value: string | undefined): Algorithm => {
-  const algorithm = (value ?? DEFAULT_ALGORITHM).toUpperCase() as Algorithm;
+const resolveAlgorithm = (value: string | undefined): HmacAlgorithm => {
+  const algorithm = (value ?? DEFAULT_ALGORITHM).toUpperCase() as HmacAlgorithm;
   if (!SUPPORTED_HMAC_ALGORITHMS.has(algorithm)) {
     throw new Error(`Unsupported JWT algorithm: ${algorithm}. Allowed: ${Array.from(SUPPORTED_HMAC_ALGORITHMS).join(', ')}`);
   }
