@@ -199,7 +199,7 @@ const ProfilePage = () => {
       return;
     }
     
-    createReferralCodeMutation.mutate();
+    createReferralCodeMutation.mutate(undefined);
   };
 
   const tabs = [
