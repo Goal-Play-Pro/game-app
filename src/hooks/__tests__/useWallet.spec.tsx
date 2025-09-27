@@ -21,6 +21,17 @@ jest.mock('../../services/api', () => {
 
 import { useWallet } from '../useWallet';
 
+type Eip1193Provider = {
+  request: jest.Mock;
+  on?: jest.Mock;
+  removeListener?: jest.Mock;
+  isMetaMask?: boolean;
+  isSafePal?: boolean;
+};
+
+const METAMASK_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+const SAFEPAL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+
 class LocalStorageMock {
   private store = new Map<string, string>();
 
@@ -42,7 +53,7 @@ class LocalStorageMock {
 }
 
 describe('useWallet', () => {
-  const originalEthereum = (global as any).ethereum;
+  let originalWindow: any;
   let requestMock: jest.Mock;
   let queryClient: QueryClient;
 
@@ -50,7 +61,8 @@ describe('useWallet', () => {
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
 
-  beforeAll(() => {
+  beforeEach(() => {
+    originalWindow = global.window;
     (global as any).localStorage = new LocalStorageMock();
     if (typeof (global as any).CustomEvent === 'undefined') {
       (global as any).CustomEvent = class CustomEvent<T> extends Event {
@@ -65,21 +77,45 @@ describe('useWallet', () => {
 
   afterEach(() => {
     jest.resetAllMocks();
-    (global as any).ethereum = originalEthereum;
+    global.window = originalWindow;
     (global as any).localStorage = new LocalStorageMock();
     if (queryClient) {
       queryClient.clear();
     }
   });
 
-  const setupProvider = () => {
-    requestMock = jest.fn();
-    const provider = {
+  const setupProvider = (
+    overrides: Partial<Eip1193Provider> = {},
+    extraWindows: Record<string, unknown> = {},
+    handler?: (method: string) => any,
+  ) => {
+    const win = (originalWindow ?? global.window ?? {}) as any;
+    requestMock = jest.fn().mockImplementation(({ method }: { method: string }) => {
+      if (handler) {
+        return handler(method);
+      }
+      return Promise.reject(new Error(`Unexpected request ${method}`));
+    });
+
+    const provider: Eip1193Provider = {
       request: requestMock,
       on: jest.fn(),
       removeListener: jest.fn(),
+      ...overrides,
     };
-    (global as any).ethereum = provider;
+
+    if ('safePal' in win) {
+      delete win.safePal;
+    }
+    Object.assign(win, extraWindows);
+    if (provider.isSafePal) {
+      win.safePal = provider;
+    } else if (extraWindows.safePal) {
+      win.safePal = extraWindows.safePal;
+    }
+    win.ethereum = provider;
+    global.window = win;
+
     return provider;
   };
 
@@ -91,16 +127,19 @@ describe('useWallet', () => {
   });
 
   it('deduplicates concurrent connect attempts', async () => {
-    setupProvider();
-    requestMock.mockImplementation(({ method }: { method: string }) => {
-      if (method === 'eth_requestAccounts') {
-        return Promise.resolve(['0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266']);
-      }
-      if (method === 'eth_chainId') {
-        return Promise.resolve('0x1');
-      }
-      return Promise.resolve(null);
-    });
+    setupProvider(
+      { isMetaMask: true },
+      {},
+      (method) => {
+        if (method === 'eth_requestAccounts') {
+          return Promise.resolve([METAMASK_ADDRESS]);
+        }
+        if (method === 'eth_chainId') {
+          return Promise.resolve('0x1');
+        }
+        return Promise.resolve(null);
+    },
+  );
 
     queryClient = new QueryClient();
     const { result } = renderHook(() => useWallet(), { wrapper: Wrapper });
@@ -119,6 +158,8 @@ describe('useWallet', () => {
     expect(invokedMethods).not.toContain('personal_sign');
     expect(invokedMethods).not.toContain('wallet_switchEthereumChain');
     expect(invokedMethods).not.toContain('wallet_addEthereumChain');
+    expect(result.current.walletType).toBe('metamask');
+    expect(localStorage.getItem('walletType')).toBe('metamask');
   });
 
   it('blocks eth_sign requests even after provider guard is applied', async () => {
@@ -131,5 +172,102 @@ describe('useWallet', () => {
     await expect(provider.request({ method: 'eth_sign' })).rejects.toThrow(
       'Direct eth_sign requests are blocked for security reasons.',
     );
+  });
+
+  it('detects SafePal provider and persists wallet type', async () => {
+    setupProvider(
+      { isSafePal: true },
+      {},
+      (method) => {
+        if (method === 'eth_requestAccounts') {
+          return Promise.resolve([SAFEPAL_ADDRESS]);
+        }
+        if (method === 'eth_chainId') {
+          return Promise.resolve('0x38');
+        }
+        if (method === 'eth_accounts') {
+          return Promise.resolve([SAFEPAL_ADDRESS]);
+        }
+        if (method === 'personal_sign') {
+          return Promise.resolve('0xsignature');
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    queryClient = new QueryClient();
+    const { result } = renderHook(() => useWallet(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.connectWallet();
+    });
+
+    expect(result.current.walletType).toBe('safepal');
+    expect(localStorage.getItem('walletType')).toBe('safepal');
+
+    expect(result.current.walletType).toBe('safepal');
+  });
+
+  it('updates wallet type when switching from MetaMask to SafePal', async () => {
+    // First render with MetaMask
+    setupProvider(
+      { isMetaMask: true },
+      {},
+      (method) => {
+        if (method === 'eth_requestAccounts') {
+          return Promise.resolve([METAMASK_ADDRESS]);
+        }
+        if (method === 'eth_chainId') {
+          return Promise.resolve('0x38');
+        }
+        if (method === 'eth_accounts') {
+          return Promise.resolve([METAMASK_ADDRESS]);
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    queryClient = new QueryClient();
+    const { result, unmount } = renderHook(() => useWallet(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.connectWallet();
+    });
+
+    expect(result.current.walletType).toBe('metamask');
+    expect(localStorage.getItem('walletType')).toBe('metamask');
+
+    unmount();
+
+    // Initialize hook with persisted state and SafePal available
+    setupProvider(
+      { isSafePal: true },
+      {},
+      (method) => {
+        if (method === 'eth_accounts') {
+          return Promise.resolve([SAFEPAL_ADDRESS]);
+        }
+        if (method === 'eth_chainId') {
+          return Promise.resolve('0x38');
+        }
+        if (method === 'eth_requestAccounts') {
+          return Promise.resolve([SAFEPAL_ADDRESS]);
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    queryClient = new QueryClient();
+    const { result: safepalResult } = renderHook(() => useWallet(), { wrapper: Wrapper });
+
+    // Ensure state rehydrates with previous value before reconnecting
+    expect(safepalResult.current.walletType).toBe('metamask');
+
+    await act(async () => {
+      await safepalResult.current.connectWallet();
+    });
+
+    expect(safepalResult.current.walletType).toBe('safepal');
+    expect(localStorage.getItem('walletType')).toBe('safepal');
   });
 });

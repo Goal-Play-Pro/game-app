@@ -1,0 +1,1246 @@
+From f15a469dc8cf9020ebce98c937109e9dcf9154a8 Mon Sep 17 00:00:00 2001
+From: falcoxcorp <falcoxcorp@gmail.com>
+Date: Fri, 26 Sep 2025 22:36:00 -0400
+Subject: [PATCH 1/3] Integrar SafePal Wallet Support
+
+---
+ src/components/ai/AIAgent.tsx           |  33 ++++++-
+ src/components/common/AddToMetaMask.tsx |  36 ++++++-
+ src/components/layout/Header.tsx        |  24 ++++-
+ src/components/payment/PaymentModal.tsx |  32 +++++--
+ src/components/wallet/WalletConnect.tsx |  77 +++++++++++++--
+ src/components/wallet/WalletManager.tsx |  76 +++++++++++++--
+ src/hooks/useWallet.ts                  | 121 ++++++++++++++++++------
+ src/pages/HomePage.tsx                  |  20 +++-
+ src/services/payment.service.ts         | 119 +++++++++++++++++++----
+ src/vite-env.d.ts                       |   9 ++
+ 10 files changed, 470 insertions(+), 77 deletions(-)
+
+diff --git a/src/components/ai/AIAgent.tsx b/src/components/ai/AIAgent.tsx
+index 16a9da1..51953ac 100644
+--- a/src/components/ai/AIAgent.tsx
++++ b/src/components/ai/AIAgent.tsx
+@@ -153,13 +153,13 @@ El sistema de penalty en Goal Play es revolucionario:
+ 🎯 **Guía Rápida para Empezar**:
+ 
+ 1️⃣ **Conecta tu Wallet**:
+-   - Instala MetaMask
++   - Instala MetaMask o SafePal
+    - Conecta en la esquina superior derecha
+    - Cambia a BSC network
+ 
+ 2️⃣ **Añade Token GOAL**:
+    - Ve a Tokenomics
+-   - Clic en "Añadir a MetaMask"
++   - Clic en "Añadir a tu Wallet"
+    - ¡Listo para recibir recompensas!
+ 
+ 3️⃣ **Compra tu Primer Pack**:
+@@ -180,6 +180,32 @@ El sistema de penalty en Goal Play es revolucionario:
+ ¿En qué paso necesitas ayuda? 🎮`;
+     }
+     
++    if (message.includes('wallet') || message.includes('safepal') || message.includes('metamask')) {
++      return `¡Excelente pregunta sobre wallets! 🦊🛡️
++
++Goal Play es compatible con las mejores wallets:
++
++🦊 **MetaMask**:
++- La wallet más popular del mundo
++- Perfecta para principiantes
++- Extensión de navegador fácil
++
++🛡️ **SafePal**:
++- Wallet segura y confiable
++- Soporte multi-chain nativo
++- Interfaz intuitiva
++
++🔗 **Ambas Funcionan Igual**:
++- Conecta con un clic
++- Paga con USDT en BSC
++- Recibe recompensas automáticamente
++- Gestiona tus NFTs
++
++💡 **Consejo**: ¡Usa la que prefieras! Goal Play detecta automáticamente tu wallet y se adapta.
++
++¿Necesitas ayuda instalando alguna? 🚀`;
++    }
++    
+     return `¡Hola! 👋 Soy tu asistente experto en Goal Play.
+ 
+ Puedo ayudarte con TODO sobre nuestro ecosistema:
+@@ -187,6 +213,7 @@ Puedo ayudarte con TODO sobre nuestro ecosistema:
+ 💰 Economía y tokenomics  
+ 🏆 Estrategias de inversión
+ 🎮 Guías paso a paso
++🦊 Wallets compatibles (MetaMask, SafePal)
+ 
+ ¿Qué te gustaría saber? ⚽🚀`;
+   };
+@@ -195,7 +222,7 @@ Puedo ayudarte con TODO sobre nuestro ecosistema:
+     return `¡Ups! 😅 Tuve un pequeño problema técnico, pero estoy aquí para ayudarte.
+ 
+ 🎯 **Acciones Rápidas**:
+-- Conecta tu wallet y añade token GOAL
++- Conecta tu wallet (MetaMask/SafePal) y añade token GOAL
+ - Explora los packs desde $30 USDT
+ - Crea tu código de referido (5% comisión)
+ - API de producción: https://game.goalplay.pro/api/
+diff --git a/src/components/common/AddToMetaMask.tsx b/src/components/common/AddToMetaMask.tsx
+index a8a3465..412583c 100644
+--- a/src/components/common/AddToMetaMask.tsx
++++ b/src/components/common/AddToMetaMask.tsx
+@@ -1,6 +1,7 @@
+ import { useState } from 'react';
+ import { motion } from 'framer-motion';
+-import { Plus, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react';
++import { Plus, ExternalLink, CheckCircle, AlertCircle, Wallet, Shield } from 'lucide-react';
++import { useWallet } from '../../hooks/useWallet';
+ 
+ interface AddToMetaMaskProps {
+   className?: string;
+@@ -11,6 +12,7 @@ interface AddToMetaMaskProps {
+ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToMetaMaskProps) => {
+   const [isCopying, setIsCopying] = useState(false);
+   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
++  const { walletType, detectWalletType } = useWallet();
+ 
+   // Token information from BSC contract
+   const tokenInfo = {
+@@ -20,6 +22,22 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
+     image: 'https://photos.pinksale.finance/file/pinksale-logo-upload/1757174953372-9634c48090be099c9daecc972d29f028.png'
+   };
+ 
++  const getWalletIcon = (type: string | null) => {
++    switch (type) {
++      case 'safepal': return Shield;
++      case 'metamask': return Wallet;
++      default: return Wallet;
++    }
++  };
++
++  const getWalletName = (type: string | null) => {
++    switch (type) {
++      case 'safepal': return 'SafePal';
++      case 'metamask': return 'MetaMask';
++      default: return 'your wallet';
++    }
++  };
++
+   const copyTokenDetails = async () => {
+     const formattedDetails = `Token: ${tokenInfo.symbol}\nContract: ${tokenInfo.address}\nDecimals: ${tokenInfo.decimals}\nNetwork: BNB Smart Chain`;
+ 
+@@ -49,6 +67,9 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
+     lg: 'w-6 h-6'
+   };
+ 
++  const currentWalletType = walletType || detectWalletType();
++  const WalletIcon = getWalletIcon(currentWalletType);
++
+   return (
+     <div className={className}>
+       {showTitle && (
+@@ -57,7 +78,7 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
+             Token GOAL details
+           </h3>
+           <p className="text-gray-400">
+-            Usa la información a continuación para añadir el token GOAL manualmente en tu wallet.
++            Usa la información a continuación para añadir el token GOAL manualmente en {getWalletName(currentWalletType)}.
+           </p>
+         </div>
+       )}
+@@ -86,6 +107,12 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
+             </div>
+             <div className="text-sm text-football-green">BNB Smart Chain</div>
+           </div>
++          
++          {/* Wallet Type Indicator */}
++          <div className="flex items-center space-x-2 text-sm text-gray-400">
++            <WalletIcon className="w-4 h-4" />
++            <span>{getWalletName(currentWalletType)}</span>
++          </div>
+         </div>
+ 
+         {/* Contract Details */}
+@@ -149,7 +176,7 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
+             className="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-center"
+           >
+             <p className="text-green-400 text-sm">
+-              Datos copiados. Pégalos en MetaMask → Import Tokens → Custom token.
++              Datos copiados. Pégalos en {getWalletName(currentWalletType)} → Import Tokens → Custom token.
+             </p>
+           </motion.div>
+         )}
+@@ -167,9 +194,10 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
+         )}
+ 
+         <div className="mt-6 text-xs text-gray-500 space-y-2">
+-          <p>· En MetaMask abre "Import Tokens" &gt; "Import custom token" y pega los datos copiados.</p>
++          <p>· En {getWalletName(currentWalletType)} abre "Import Tokens" > "Import custom token" y pega los datos copiados.</p>
+           <p>· Verifica que estés en BNB Smart Chain antes de añadir el contrato.</p>
+           <p>· También puedes escribir los valores manualmente si el portapapeles no está disponible.</p>
++          <p>· SafePal y MetaMask son totalmente compatibles con Goal Play.</p>
+         </div>
+       </div>
+     </div>
+diff --git a/src/components/layout/Header.tsx b/src/components/layout/Header.tsx
+index d2374c4..2b010b9 100644
+--- a/src/components/layout/Header.tsx
++++ b/src/components/layout/Header.tsx
+@@ -1,15 +1,17 @@
+ import { useState } from 'react';
+ import { Link, useLocation } from 'react-router-dom';
+ import { motion, AnimatePresence } from 'framer-motion';
+-import { Search, Menu, X, User, Bell, Settings, Trophy, ShoppingBag } from 'lucide-react';
++import { Search, Menu, X, User, Bell, Settings, Trophy, ShoppingBag, Wallet, Shield } from 'lucide-react';
+ import WalletConnect from '../wallet/WalletConnect';
+ import ReferralBanner from '../referral/ReferralBanner';
++import { useWallet } from '../../hooks/useWallet';
+ 
+ const Header = () => {
+   const [isMenuOpen, setIsMenuOpen] = useState(false);
+   const [isSearchOpen, setIsSearchOpen] = useState(false);
+   const [searchQuery, setSearchQuery] = useState('');
+   const location = useLocation();
++  const { walletType, detectWalletType } = useWallet();
+ 
+   const navigation = [
+     { name: 'Home', href: '/', icon: null },
+@@ -24,6 +26,22 @@ const Header = () => {
+ 
+   const isActive = (path: string) => location.pathname === path;
+ 
++  const getWalletIcon = (type: string | null) => {
++    switch (type) {
++      case 'safepal': return Shield;
++      case 'metamask': return Wallet;
++      default: return Wallet;
++    }
++  };
++
++  const getWalletName = (type: string | null) => {
++    switch (type) {
++      case 'safepal': return 'SafePal';
++      case 'metamask': return 'MetaMask';
++      default: return 'Wallet';
++    }
++  };
++
+   return (
+     <>
+       <ReferralBanner />
+@@ -223,7 +241,9 @@ const Header = () => {
+                   className="flex items-center space-x-2 text-xs text-gray-400 hover:text-football-green transition-colors"
+                 >
+                   <div className="w-2 h-2 rounded-full bg-football-green" />
+-                  <span>API: game.goalplay.pro • Create Referral Code (5%)</span>
++                  <span>
++                    API: game.goalplay.pro • {getWalletName(detectWalletType())} Ready • Create Referral Code (5%)
++                  </span>
+                 </Link>
+               </div>
+             </div>
+diff --git a/src/components/payment/PaymentModal.tsx b/src/components/payment/PaymentModal.tsx
+index c393c18..2165157 100644
+--- a/src/components/payment/PaymentModal.tsx
++++ b/src/components/payment/PaymentModal.tsx
+@@ -34,7 +34,7 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
+   const [timeLeft, setTimeLeft] = useState<number>(0);
+   const gatewayContract = PAYMENT_CONFIG.PAYMENT_GATEWAY_CONTRACT;
+ 
+-  const { address, isConnected, connectWallet } = useWallet();
++  const { address, isConnected, connectWallet, walletType } = useWallet();
+   const {
+     initiatePayment,
+     checkUSDTBalance,
+@@ -50,6 +50,14 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
+     fetchPaymentStatus,
+   } = usePayment();
+ 
++  const getWalletName = (type: string | null) => {
++    switch (type) {
++      case 'safepal': return 'SafePal';
++      case 'metamask': return 'MetaMask';
++      default: return 'Wallet';
++    }
++  };
++
+   // Countdown timer
+   useEffect(() => {
+     if (!isOpen) return;
+@@ -275,6 +283,12 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
+                   <span className="text-gray-400">Network:</span>
+                   <span className="text-yellow-400">BNB Smart Chain</span>
+                 </div>
++                {walletType && (
++                  <div className="flex justify-between">
++                    <span className="text-gray-400">Wallet:</span>
++                    <span className="text-blue-400">{getWalletName(walletType)}</span>
++                  </div>
++                )}
+               </div>
+             </div>
+ 
+@@ -290,12 +304,14 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
+                     <Wallet className="w-8 h-8 text-white" />
+                   </div>
+                   <h4 className="text-lg font-semibold text-white mb-2">Connect Your Wallet</h4>
+-                  <p className="text-gray-400 mb-6">Connect MetaMask to proceed with payment</p>
++                  <p className="text-gray-400 mb-6">
++                    Connect {getWalletName(walletType)} or any compatible wallet to proceed with payment
++                  </p>
+                   <button
+                     onClick={connectWallet}
+                     className="btn-primary w-full"
+                   >
+-                    Connect MetaMask
++                    Connect {getWalletName(walletType)}
+                   </button>
+                 </motion.div>
+               )}
+@@ -379,6 +395,10 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
+                           ~${gasEstimate?.gasCostUSD || '0.30'} USD
+                         </span>
+                       </div>
++                      <div className="flex justify-between">
++                        <span className="text-gray-400">Wallet:</span>
++                        <span className="text-blue-400 font-semibold">{getWalletName(walletType)}</span>
++                      </div>
+                       <div className="border-t border-white/10 pt-3 flex justify-between">
+                         <span className="text-gray-400">Remaining Balance:</span>
+                         <span className="text-white font-semibold">
+@@ -411,7 +431,7 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
+                       </a>
+                     </div>
+                     <p className="mt-3 text-xs text-gray-500 text-left">
+-                      MetaMask will request one or two confirmations: a token approval (if needed) followed by the payment transaction. Review each prompt carefully before accepting.
++                      {getWalletName(walletType)} will request one or two confirmations: a token approval (if needed) followed by the payment transaction. Review each prompt carefully before accepting.
+                     </p>
+                   </div>
+ 
+@@ -464,9 +484,9 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
+                   <div className="w-16 h-16 bg-gradient-to-r from-football-blue to-football-purple rounded-full flex items-center justify-center mx-auto mb-4">
+                     <LoadingSpinner size="sm" color="white" />
+                   </div>
+-                  <h4 className="text-lg font-semibold text-white mb-2">Confirming in MetaMask</h4>
++                  <h4 className="text-lg font-semibold text-white mb-2">Confirming in {getWalletName(walletType)}</h4>
+                   <p className="text-gray-400 mb-6">
+-                    Approve the prompts in MetaMask to authorize the payment gateway and send your USDT.
++                    Approve the prompts in {getWalletName(walletType)} to authorize the payment gateway and send your USDT.
+                   </p>
+                   
+                   <div className="glass rounded-lg p-4">
+diff --git a/src/components/wallet/WalletConnect.tsx b/src/components/wallet/WalletConnect.tsx
+index f3b193e..8d5db0e 100644
+--- a/src/components/wallet/WalletConnect.tsx
++++ b/src/components/wallet/WalletConnect.tsx
+@@ -1,6 +1,6 @@
+ import { useState } from 'react';
+ import { motion } from 'framer-motion';
+-import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, AlertCircle } from 'lucide-react';
++import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, AlertCircle, Shield } from 'lucide-react';
+ import { useWallet } from '../../hooks/useWallet';
+ 
+ interface WalletConnectProps {
+@@ -18,9 +18,11 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
+     chainType, 
+     isConnecting, 
+     error, 
++    walletType,
+     connectWallet, 
+     disconnectWallet,
+-    switchToNetwork 
++    switchToNetwork,
++    detectWalletType
+   } = useWallet();
+ 
+   const sizeClasses = {
+@@ -35,6 +37,47 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
+     lg: 'w-6 h-6'
+   };
+ 
++  const getWalletIcon = (type: string | null) => {
++    switch (type) {
++      case 'safepal':
++        return <Shield className={iconSizes[size]} />;
++      case 'metamask':
++        return <Wallet className={iconSizes[size]} />;
++      default:
++        return <Wallet className={iconSizes[size]} />;
++    }
++  };
++
++  const getWalletName = (type: string | null) => {
++    switch (type) {
++      case 'safepal':
++        return 'SafePal';
++      case 'metamask':
++        return 'MetaMask';
++      default:
++        return 'Wallet';
++    }
++  };
++
++  const getAvailableWallets = () => {
++    const wallets = [];
++    
++    if (window.ethereum?.isMetaMask) {
++      wallets.push({ type: 'metamask', name: 'MetaMask', icon: Wallet });
++    }
++    
++    if (window.safePal?.isSafePal) {
++      wallets.push({ type: 'safepal', name: 'SafePal', icon: Shield });
++    }
++    
++    // Si no hay wallets específicas detectadas pero hay ethereum provider
++    if (wallets.length === 0 && window.ethereum) {
++      wallets.push({ type: 'metamask', name: 'MetaMask', icon: Wallet });
++    }
++    
++    return wallets;
++  };
++
+   const formatAddress = (addr: string | null) => {
+     if (!addr) return '';
+     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+@@ -92,6 +135,9 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
+   };
+ 
+   if (!isConnected) {
++    const availableWallets = getAvailableWallets();
++    const detectedWallet = detectWalletType();
++    
+     return (
+       <div className={className}>
+         <motion.button
+@@ -108,12 +154,23 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
+             </>
+           ) : (
+             <>
+-              <Wallet className={iconSizes[size]} />
+-              <span>Connect Wallet</span>
++              {getWalletIcon(detectedWallet)}
++              <span>Connect {getWalletName(detectedWallet)}</span>
+             </>
+           )}
+         </motion.button>
+         
++        {/* Wallet Detection Info */}
++        {availableWallets.length > 0 && (
++          <div className="mt-2 text-xs text-gray-400 text-center">
++            {availableWallets.length === 1 ? (
++              <span>{availableWallets[0].name} detected</span>
++            ) : (
++              <span>{availableWallets.map(w => w.name).join(' & ')} available</span>
++            )}
++          </div>
++        )}
++        
+         {error && (
+           <motion.div
+             initial={{ opacity: 0, y: 10 }}
+@@ -124,7 +181,6 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
+               <AlertCircle className="w-4 h-4" />
+               <span>{error}</span>
+             </div>
+-            <span>Conectar Wallet</span>
+           </motion.div>
+         )}
+       </div>
+@@ -142,6 +198,7 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
+         }`}
+       >
+         <div className="w-2 h-2 bg-green-400 rounded-full" />
++        {getWalletIcon(walletType)}
+         <span className="font-mono">{formatAddress(address!)}</span>
+         {showDropdown && <ChevronDown className={`${iconSizes[size]} transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />}
+       </motion.button>
+@@ -158,11 +215,15 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
+           <div className="p-4">
+             {/* Wallet Info */}
+             <div className="flex items-center space-x-3 mb-4 pb-4 border-b border-white/10">
+-              <div className="w-10 h-10 bg-gradient-to-r from-football-green to-football-blue rounded-full flex items-center justify-center">
+-                <Wallet className="w-5 h-5 text-white" />
++              <div className={`w-10 h-10 bg-gradient-to-r ${
++                walletType === 'safepal' ? 'from-blue-500 to-purple-500' : 'from-football-green to-football-blue'
++              } rounded-full flex items-center justify-center`}>
++                {getWalletIcon(walletType)}
+               </div>
+               <div className="flex-1">
+-                <div className="text-white font-semibold">Connected Wallet</div>
++                <div className="text-white font-semibold">
++                  {getWalletName(walletType)} Connected
++                </div>
+                 <div className="text-sm text-gray-400 font-mono">{formatAddress(address!)}</div>
+               </div>
+             </div>
+diff --git a/src/components/wallet/WalletManager.tsx b/src/components/wallet/WalletManager.tsx
+index 3c97d6d..864ba5b 100644
+--- a/src/components/wallet/WalletManager.tsx
++++ b/src/components/wallet/WalletManager.tsx
+@@ -8,7 +8,8 @@ import {
+   ExternalLink, 
+   Copy,
+   CheckCircle,
+-  AlertCircle
++  AlertCircle,
++  Shield
+ } from 'lucide-react';
+ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+ import ApiService from '../../services/api';
+@@ -16,12 +17,14 @@ import LoadingSpinner from '../common/LoadingSpinner';
+ import { ChainType } from '../../types';
+ import { useAuthStatus } from '../../hooks/useAuthStatus';
+ import { logWalletRequirement } from '../../utils/wallet.utils';
++import { useWallet } from '../../hooks/useWallet';
+ 
+ const getWalletPersistence = () => {
+   if (typeof window === 'undefined') {
+     return {
+       connected: false,
+       address: null as string | null,
++      walletType: null as string | null,
+     };
+   }
+ 
+@@ -29,11 +32,13 @@ const getWalletPersistence = () => {
+     return {
+       connected: localStorage.getItem('walletConnected') === 'true',
+       address: localStorage.getItem('walletAddress'),
++      walletType: localStorage.getItem('walletType'),
+     };
+   } catch {
+     return {
+       connected: false,
+       address: null,
++      walletType: null,
+     };
+   }
+ };
+@@ -42,7 +47,8 @@ const WalletManager = () => {
+   const [isLinking, setIsLinking] = useState(false);
+   const queryClient = useQueryClient();
+   const isAuthenticated = useAuthStatus();
+-  const { connected: walletConnected, address: walletAddress } = getWalletPersistence();
++  const { connected: walletConnected, address: walletAddress, walletType: persistedWalletType } = getWalletPersistence();
++  const { walletType: currentWalletType, detectWalletType } = useWallet();
+ 
+   // Fetch user wallets
+   const { data: wallets, isLoading: walletsLoading } = useQuery({
+@@ -90,6 +96,22 @@ const WalletManager = () => {
+     }
+   };
+ 
++  const getWalletIcon = (type: string | null) => {
++    switch (type) {
++      case 'safepal': return Shield;
++      case 'metamask': return Wallet;
++      default: return Wallet;
++    }
++  };
++
++  const getWalletName = (type: string | null) => {
++    switch (type) {
++      case 'safepal': return 'SafePal';
++      case 'metamask': return 'MetaMask';
++      default: return 'Wallet';
++    }
++  };
++
+   const copyAddress = (address: string) => {
+     navigator.clipboard.writeText(address);
+   };
+@@ -138,6 +160,13 @@ const WalletManager = () => {
+       {/* Header */}
+       <div className="flex items-center justify-between mb-6">
+         <h3 className="text-xl font-semibold text-white">Connected Wallets</h3>
++        <div className="flex items-center space-x-3">
++          {/* Current Wallet Type Indicator */}
++          <div className="flex items-center space-x-2 text-sm text-gray-400">
++            {React.createElement(getWalletIcon(currentWalletType || persistedWalletType), { className: "w-4 h-4" })}
++            <span>{getWalletName(currentWalletType || persistedWalletType)}</span>
++          </div>
++          
+         <button
+           onClick={() => setIsLinking(!isLinking)}
+           className="btn-primary flex items-center space-x-2"
+@@ -171,8 +200,12 @@ const WalletManager = () => {
+                       <div className="flex items-center space-x-1 bg-football-green/20 text-football-green px-2 py-1 rounded-full text-xs">
+                         <Star className="w-3 h-3" />
+                         <span>Primary</span>
+-                      </div>
+-                    )}
++                <div className={`w-12 h-12 bg-gradient-to-r ${
++                  wallet.chainType === 'bsc' ? 'from-yellow-400 to-orange-500' :
++                  wallet.chainType === 'ethereum' ? 'from-blue-400 to-purple-500' :
++                  'from-football-green to-football-blue'
++                } rounded-full flex items-center justify-center`}>
++                  <span className="text-2xl">{getChainIcon(wallet.chainType)}</span>
+                   </div>
+                   
+                   <div className="flex items-center space-x-4 text-sm text-gray-400">
+@@ -186,6 +219,12 @@ const WalletManager = () => {
+                       <span>
+                         Last used: {new Date(wallet.lastUsedAt).toLocaleDateString()}
+                       </span>
++                    {wallet.address === walletAddress && (
++                      <div className="flex items-center space-x-1 bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full text-xs">
++                        {React.createElement(getWalletIcon(currentWalletType || persistedWalletType), { className: "w-3 h-3" })}
++                        <span>Active</span>
++                      </div>
++                    )}
+                     )}
+                   </div>
+                 </div>
+@@ -249,6 +288,7 @@ const WalletManager = () => {
+             Connect Wallet
+           </button>
+         </div>
++        </div>
+       )}
+ 
+       {/* Link New Wallet Interface */}
+@@ -260,9 +300,33 @@ const WalletManager = () => {
+         >
+           <h4 className="text-lg font-semibold text-white mb-4">Link New Wallet</h4>
+           <p className="text-gray-400 text-sm mb-4">
+-            Connect additional wallets to your account for multi-chain access
++            Connect additional wallets (MetaMask, SafePal) to your account for multi-chain access
+           </p>
+           
++          {/* Available Wallets */}
++          <div className="mb-4">
++            <div className="text-sm text-gray-400 mb-2">Available Wallets:</div>
++            <div className="flex space-x-2">
++              {typeof window !== 'undefined' && window.ethereum?.isMetaMask && (
++                <div className="flex items-center space-x-1 text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full">
++                  <Wallet className="w-3 h-3" />
++                  <span>MetaMask</span>
++                </div>
++              )}
++              {typeof window !== 'undefined' && window.safePal?.isSafePal && (
++                <div className="flex items-center space-x-1 text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded-full">
++                  <Shield className="w-3 h-3" />
++                  <span>SafePal</span>
++                </div>
++              )}
++              {typeof window !== 'undefined' && !window.ethereum?.isMetaMask && !window.safePal?.isSafePal && (
++                <div className="text-xs text-gray-400">
++                  No compatible wallets detected
++                </div>
++              )}
++            </div>
++          </div>
++          
+           <div className="flex space-x-3">
+             <button
+               onClick={() => {
+@@ -271,7 +335,7 @@ const WalletManager = () => {
+               }}
+               className="btn-primary flex-1"
+             >
+-              Connect MetaMask
++              Connect {getWalletName(detectWalletType())}
+             </button>
+             
+             <button
+diff --git a/src/hooks/useWallet.ts b/src/hooks/useWallet.ts
+index e78818a..d06cd95 100644
+--- a/src/hooks/useWallet.ts
++++ b/src/hooks/useWallet.ts
+@@ -4,6 +4,22 @@ import { useReferral } from './useReferral';
+ import ApiService from '../services/api';
+ import { API_CONFIG } from '../config/api.config';
+ 
++// SafePal Wallet Detection
++interface SafePalProvider {
++  isSafePal?: boolean;
++  request: (args: { method: string; params?: any[] }) => Promise<any>;
++  on?: (event: string, handler: (...args: any[]) => void) => void;
++  removeListener?: (event: string, handler: (...args: any[]) => void) => void;
++}
++
++interface WindowWithWallets extends Window {
++  ethereum?: any;
++  safePal?: SafePalProvider;
++  BinanceChain?: any;
++}
++
++declare const window: WindowWithWallets;
++
+ interface WalletState {
+   isConnected: boolean;
+   address: string | null;
+@@ -11,6 +27,7 @@ interface WalletState {
+   chainType: ChainType | null;
+   isConnecting: boolean;
+   error: string | null;
++  walletType: 'metamask' | 'safepal' | 'unknown' | null;
+ }
+ 
+ export const useWallet = () => {
+@@ -22,6 +39,7 @@ export const useWallet = () => {
+     chainType: null,
+     isConnecting: false,
+     error: null,
++    walletType: null,
+   });
+ 
+   // BSC Network Configuration
+@@ -37,6 +55,34 @@ export const useWallet = () => {
+     blockExplorerUrls: ['https://bscscan.com/'],
+   };
+ 
++  // Detectar tipo de wallet disponible
++  const detectWalletType = (): 'metamask' | 'safepal' | 'unknown' => {
++    if (window.safePal?.isSafePal) {
++      return 'safepal';
++    }
++    if (window.ethereum?.isMetaMask) {
++      return 'metamask';
++    }
++    if (window.ethereum) {
++      return 'metamask'; // Asumir MetaMask si hay ethereum provider
++    }
++    return 'unknown';
++  };
++
++  // Obtener provider según el tipo de wallet
++  const getWalletProvider = () => {
++    const walletType = detectWalletType();
++    
++    switch (walletType) {
++      case 'safepal':
++        return window.safePal;
++      case 'metamask':
++        return window.ethereum;
++      default:
++        return window.ethereum; // Fallback
++    }
++  };
++
+   const getChainType = (chainId: number): ChainType => {
+     switch (chainId) {
+       case 1: return ChainType.ETHEREUM;
+@@ -61,18 +107,20 @@ export const useWallet = () => {
+     localStorage.setItem('walletConnected', 'true');
+     localStorage.setItem('walletAddress', address);
+     localStorage.setItem('walletChainId', chainIdNumber.toString());
++    localStorage.setItem('walletType', detectWalletType());
+   };
+ 
+   const clearWalletPersistence = () => {
+     localStorage.removeItem('walletConnected');
+     localStorage.removeItem('walletAddress');
+     localStorage.removeItem('walletChainId');
++    localStorage.removeItem('walletType');
+   };
+ 
+   const authenticateWallet = useCallback(async (address: string, chainIdNumber: number) => {
+-    const ethereum = (window as any).ethereum;
+-    if (!ethereum) {
+-      throw new Error('Ethereum provider not available');
++    const provider = getWalletProvider();
++    if (!provider) {
++      throw new Error('Wallet provider not available');
+     }
+ 
+     try {
+@@ -81,7 +129,7 @@ export const useWallet = () => {
+ 
+       let signature: string;
+       try {
+-        signature = await ethereum.request({
++        signature = await provider.request({
+           method: 'personal_sign',
+           params: [message, address],
+         });
+@@ -94,7 +142,7 @@ export const useWallet = () => {
+ 
+       const authResponse = await ApiService.verifySiweSignature(message, signature);
+       ApiService.markSessionActive(true);
+-      console.log('✅ Wallet authenticated via SIWE');
++      console.log(`✅ ${detectWalletType().toUpperCase()} wallet authenticated via SIWE`);
+ 
+       await registerPendingReferral();
+       return authResponse;
+@@ -105,11 +153,11 @@ export const useWallet = () => {
+   }, [registerPendingReferral]);
+ 
+   const checkConnection = useCallback(async () => {
+-    const ethereum = (window as any).ethereum;
+-    if (!ethereum) return;
++    const provider = getWalletProvider();
++    if (!provider) return;
+ 
+     try {
+-      const accounts = await ethereum.request({ method: 'eth_accounts' });
++      const accounts = await provider.request({ method: 'eth_accounts' });
+       if (accounts.length === 0) {
+         clearWalletPersistence();
+         if (ApiService.isAuthenticated()) {
+@@ -123,11 +171,12 @@ export const useWallet = () => {
+           chainType: null,
+           isConnecting: false,
+           error: null,
++          walletType: null,
+         });
+         return;
+       }
+ 
+-      const chainId = await ethereum.request({ method: 'eth_chainId' });
++      const chainId = await provider.request({ method: 'eth_chainId' });
+       const chainIdNumber = parseInt(chainId, 16);
+       const hasSession = await ApiService.ensureSession();
+ 
+@@ -140,6 +189,7 @@ export const useWallet = () => {
+           chainType: getChainType(chainIdNumber),
+           isConnecting: false,
+           error: null,
++          walletType: detectWalletType(),
+         });
+         return;
+       }
+@@ -153,6 +203,7 @@ export const useWallet = () => {
+         chainType: null,
+         isConnecting: false,
+         error: 'Session expired. Click connect to authenticate again.',
++        walletType: null,
+       });
+     } catch (error) {
+       console.error('Error checking wallet connection:', error);
+@@ -160,24 +211,28 @@ export const useWallet = () => {
+   }, []);
+ 
+   const connectWallet = async () => {
+-    const ethereum = (window as any).ethereum;
+-    if (!ethereum) {
++    const provider = getWalletProvider();
++    const walletType = detectWalletType();
++    
++    if (!provider) {
+       setWalletState(prev => ({
+         ...prev,
+-        error: 'MetaMask is not installed. Please install MetaMask to continue.',
++        error: walletType === 'unknown' 
++          ? 'No compatible wallet found. Please install MetaMask or SafePal.'
++          : `${walletType === 'safepal' ? 'SafePal' : 'MetaMask'} is not properly initialized.`,
+       }));
+       return;
+     }
+ 
+-    setWalletState(prev => ({ ...prev, isConnecting: true, error: null }));
++    setWalletState(prev => ({ ...prev, isConnecting: true, error: null, walletType }));
+ 
+     try {
+       // Request account access
+-      const accounts = await ethereum.request({
++      const accounts = await provider.request({
+         method: 'eth_requestAccounts',
+       });
+ 
+-      const chainId = await ethereum.request({ method: 'eth_chainId' });
++      const chainId = await provider.request({ method: 'eth_chainId' });
+       const chainIdNumber = parseInt(chainId, 16);
+ 
+       try {
+@@ -191,11 +246,12 @@ export const useWallet = () => {
+           chainType: getChainType(chainIdNumber),
+           isConnecting: false,
+           error: null,
++          walletType,
+         });
+ 
+-        console.log(`✅ Wallet connected: ${accounts[0]} on ${getNetworkName(chainIdNumber)}`);
++        console.log(`✅ ${walletType.toUpperCase()} wallet connected: ${accounts[0]} on ${getNetworkName(chainIdNumber)}`);
+       } catch (authError: any) {
+-        console.error('❌ Wallet authentication failed:', authError);
++        console.error(`❌ ${walletType.toUpperCase()} wallet authentication failed:`, authError);
+         clearWalletPersistence();
+         if (ApiService.isAuthenticated()) {
+           ApiService.logout().catch(() => {});
+@@ -208,15 +264,17 @@ export const useWallet = () => {
+           chainType: null,
+           isConnecting: false,
+           error: authError?.message || 'Wallet authentication failed',
++          walletType: null,
+         });
+       }
+ 
+     } catch (error: any) {
+-      console.error('Error connecting wallet:', error);
++      console.error(`Error connecting ${walletType} wallet:`, error);
+       setWalletState(prev => ({
+         ...prev,
+         isConnecting: false,
+         error: error.message || 'Failed to connect wallet',
++        walletType: null,
+       }));
+     }
+   };
+@@ -233,6 +291,7 @@ export const useWallet = () => {
+       chainType: null,
+       isConnecting: false,
+       error: null,
++      walletType: null,
+     });
+ 
+     clearWalletPersistence();
+@@ -241,18 +300,18 @@ export const useWallet = () => {
+   }, []);
+ 
+   const switchToNetwork = async (targetChainId: number) => {
+-    const ethereum = (window as any).ethereum;
+-    if (!ethereum) return;
++    const provider = getWalletProvider();
++    if (!provider) return;
+ 
+     try {
+-      await ethereum.request({
++      await provider.request({
+         method: 'wallet_switchEthereumChain',
+         params: [{ chainId: `0x${targetChainId.toString(16)}` }],
+       });
+     } catch (error: any) {
+       if (error.code === 4902) {
+         // Network not added, add BSC as default
+-        await ethereum.request({
++        await provider.request({
+           method: 'wallet_addEthereumChain',
+           params: [BSC_NETWORK],
+         });
+@@ -263,8 +322,8 @@ export const useWallet = () => {
+ 
+   // Listen for account and network changes
+   useEffect(() => {
+-    const ethereum = (window as any).ethereum;
+-    if (!ethereum) return;
++    const provider = getWalletProvider();
++    if (!provider) return;
+ 
+     const handleAccountsChanged = async (accounts: string[]) => {
+       if (accounts.length === 0) {
+@@ -282,6 +341,7 @@ export const useWallet = () => {
+         chainType: null,
+         isConnecting: false,
+         error: 'Account changed. Please reconnect your wallet.',
++        walletType: null,
+       }));
+     };
+ 
+@@ -294,13 +354,13 @@ export const useWallet = () => {
+       }));
+     };
+ 
+-    ethereum.on?.('accountsChanged', handleAccountsChanged);
+-    ethereum.on?.('chainChanged', handleChainChanged);
++    provider.on?.('accountsChanged', handleAccountsChanged);
++    provider.on?.('chainChanged', handleChainChanged);
+ 
+     return () => {
+-      if (ethereum) {
+-        ethereum.removeListener?.('accountsChanged', handleAccountsChanged);
+-        ethereum.removeListener?.('chainChanged', handleChainChanged);
++      if (provider) {
++        provider.removeListener?.('accountsChanged', handleAccountsChanged);
++        provider.removeListener?.('chainChanged', handleChainChanged);
+       }
+     };
+   }, [checkConnection, disconnectWallet]);
+@@ -313,9 +373,12 @@ export const useWallet = () => {
+     isConnected: walletState.isConnected,
+     isConnecting: walletState.isConnecting,
+     error: walletState.error,
++    walletType: walletState.walletType,
+     connectWallet,
+     disconnectWallet,
+     switchToNetwork,
+     checkConnection,
++    detectWalletType,
++    getWalletProvider,
+   };
+ };
+diff --git a/src/pages/HomePage.tsx b/src/pages/HomePage.tsx
+index d41fa17..c6e241f 100644
+--- a/src/pages/HomePage.tsx
++++ b/src/pages/HomePage.tsx
+@@ -182,7 +182,7 @@ const HomePage = () => {
+                 
+                 <Link to="/shop" className="btn-outline touch-target text-center">
+                   Visit Shop
+-                </Link>
++                Connect your wallet (MetaMask, SafePal, or compatible) and add the official GOAL token to be ready for the ecosystem
+               </motion.div>
+             </motion.div>
+ 
+@@ -1044,8 +1044,24 @@ const HomePage = () => {
+                 
+                 <Link to="/shop" className="btn-outline">
+                   Get Player Packs
+-                </Link>
++                  Conecta tu wallet (MetaMask, SafePal, o compatible) para empezar a jugar y ganar recompensas
+               </div>
++                
++                {/* Supported Wallets */}
++                <div className="mb-6">
++                  <div className="text-sm text-gray-400 mb-3">Wallets Compatibles:</div>
++                  <div className="flex justify-center space-x-4">
++                    <div className="flex items-center space-x-2 bg-blue-500/20 text-blue-400 px-3 py-2 rounded-lg">
++                      <Wallet className="w-4 h-4" />
++                      <span className="text-sm">MetaMask</span>
++                    </div>
++                    <div className="flex items-center space-x-2 bg-purple-500/20 text-purple-400 px-3 py-2 rounded-lg">
++                      <Shield className="w-4 h-4" />
++                      <span className="text-sm">SafePal</span>
++                    </div>
++                  </div>
++                </div>
++                
+             </div>
+           </motion.div>
+         </div>
+diff --git a/src/services/payment.service.ts b/src/services/payment.service.ts
+index 7b83dcc..c0accbd 100644
+--- a/src/services/payment.service.ts
++++ b/src/services/payment.service.ts
+@@ -1,6 +1,19 @@
+ import { ethers } from 'ethers';
+ import { PAYMENT_CONFIG } from '../config/payment.config';
+ 
++// SafePal Provider Interface
++interface SafePalProvider {
++  isSafePal?: boolean;
++  request: (args: { method: string; params?: any[] }) => Promise<any>;
++}
++
++interface WindowWithWallets extends Window {
++  ethereum?: any;
++  safePal?: SafePalProvider;
++}
++
++declare const window: WindowWithWallets;
++
+ /**
+  * Payment Service - Manejo de pagos reales con MetaMask
+  * Integra con contratos USDT en BSC para pagos reales
+@@ -26,12 +39,60 @@ export class PaymentService {
+   ];
+ 
+   /**
+-   * Verificar si MetaMask está instalado
++   * Detectar wallets compatibles disponibles
++   */
++  static getAvailableWallets(): { type: string; name: string; detected: boolean }[] {
++    if (typeof window === 'undefined') {
++      return [];
++    }
++
++    const wallets = [
++      {
++        type: 'metamask',
++        name: 'MetaMask',
++        detected: !!(window.ethereum?.isMetaMask)
++      },
++      {
++        type: 'safepal',
++        name: 'SafePal',
++        detected: !!(window.safePal?.isSafePal)
++      }
++    ];
++
++    return wallets;
++  }
++
++  /**
++   * Verificar si hay alguna wallet compatible instalada
++   */
++  static isWalletInstalled(): boolean {
++    return this.getAvailableWallets().some(wallet => wallet.detected);
++  }
++
++  /**
++   * Verificar si MetaMask está instalado (compatibilidad hacia atrás)
+    */
+   static isMetaMaskInstalled(): boolean {
+     return typeof window !== 'undefined' && !!(window as any).ethereum;
+   }
+ 
++  /**
++   * Obtener el provider de wallet activo
++   */
++  private static getWalletProvider() {
++    if (window.safePal?.isSafePal) {
++      console.log('🛡️ Using SafePal provider');
++      return window.safePal;
++    }
++    
++    if (window.ethereum) {
++      console.log('🦊 Using MetaMask/Ethereum provider');
++      return window.ethereum;
++    }
++    
++    return null;
++  }
++
+   /**
+    * Asegura que la wallet esté conectada a BSC.
+    * Solo se invoca durante acciones sensibles (pagos) que el usuario inicia explícitamente,
+@@ -42,14 +103,14 @@ export class PaymentService {
+     chainId?: number;
+     error?: string;
+   }> {
+-    const ethereum = (window as any).ethereum;
++    const provider = this.getWalletProvider();
+ 
+-    if (!ethereum) {
+-      return { success: false, error: 'MetaMask not installed' };
++    if (!provider) {
++      return { success: false, error: 'No compatible wallet found. Please install MetaMask or SafePal.' };
+     }
+ 
+     try {
+-      const currentChainIdHex = await ethereum.request({ method: 'eth_chainId' });
++      const currentChainIdHex = await provider.request({ method: 'eth_chainId' });
+       const currentChainId = parseInt(currentChainIdHex, 16);
+ 
+       if (currentChainId === this.BSC_CHAIN_ID) {
+@@ -71,17 +132,21 @@ export class PaymentService {
+    * Cambiar a BSC network
+    */
+   static async switchToBSC(): Promise<void> {
+-    const ethereum = (window as any).ethereum;
++    const provider = this.getWalletProvider();
++    
++    if (!provider) {
++      throw new Error('No wallet provider available');
++    }
+     
+     try {
+-      await ethereum.request({
++      await provider.request({
+         method: 'wallet_switchEthereumChain',
+         params: [{ chainId: '0x38' }], // BSC Mainnet
+       });
+     } catch (switchError: any) {
+       // Si BSC no está añadido, añadirlo
+       if (switchError.code === 4902) {
+-        await ethereum.request({
++        await provider.request({
+           method: 'wallet_addEthereumChain',
+           params: [{
+             chainId: '0x38',
+@@ -110,7 +175,12 @@ export class PaymentService {
+     error?: string;
+   }> {
+     try {
+-      const provider = new ethers.BrowserProvider((window as any).ethereum);
++      const walletProvider = this.getWalletProvider();
++      if (!walletProvider) {
++        throw new Error('No wallet provider available');
++      }
++      
++      const provider = new ethers.BrowserProvider(walletProvider);
+       const contract = new ethers.Contract(this.USDT_CONTRACT, this.USDT_ABI, provider);
+       
+       const balance = await contract.balanceOf(userAddress);
+@@ -144,10 +214,10 @@ export class PaymentService {
+     approvalHash?: string;
+     error?: string;
+   }> {
+-    const ethereum = (window as any).ethereum;
++    const provider = this.getWalletProvider();
+ 
+-    if (!ethereum) {
+-      return { success: false, error: 'MetaMask not detected' };
++    if (!provider) {
++      return { success: false, error: 'No compatible wallet detected. Please install MetaMask or SafePal.' };
+     }
+ 
+     if (!this.PAYMENT_GATEWAY_CONTRACT) {
+@@ -155,7 +225,7 @@ export class PaymentService {
+     }
+ 
+     try {
+-      const accounts: string[] = await ethereum.request({ method: 'eth_accounts' });
++      const accounts: string[] = await provider.request({ method: 'eth_accounts' });
+       const activeAccount = accounts?.[0];
+ 
+       if (!activeAccount) {
+@@ -167,7 +237,7 @@ export class PaymentService {
+         return { success: false, error: ensureNetwork.error || 'Failed to switch to BSC' };
+       }
+ 
+-      const provider = new ethers.BrowserProvider(ethereum);
++      const ethersProvider = new ethers.BrowserProvider(provider);
+       const signer = await provider.getSigner();
+       const usdtContract = new ethers.Contract(this.USDT_CONTRACT, this.USDT_ABI, signer);
+       const gatewayContract = new ethers.Contract(this.PAYMENT_GATEWAY_CONTRACT, this.PAYMENT_GATEWAY_ABI, signer);
+@@ -232,7 +302,12 @@ export class PaymentService {
+     error?: string;
+   }> {
+     try {
+-      const provider = new ethers.BrowserProvider((window as any).ethereum);
++      const walletProvider = this.getWalletProvider();
++      if (!walletProvider) {
++        throw new Error('No wallet provider available');
++      }
++      
++      const provider = new ethers.BrowserProvider(walletProvider);
+       const contract = new ethers.Contract(this.USDT_CONTRACT, this.USDT_ABI, provider);
+       
+       const amountWei = ethers.parseUnits(amount, 18);
+@@ -278,7 +353,12 @@ export class PaymentService {
+     error?: string;
+   }> {
+     try {
+-      const provider = new ethers.BrowserProvider((window as any).ethereum);
++      const walletProvider = this.getWalletProvider();
++      if (!walletProvider) {
++        throw new Error('No wallet provider available');
++      }
++      
++      const provider = new ethers.BrowserProvider(walletProvider);
+       
+       const tx = await provider.getTransaction(txHash);
+       if (!tx) {
+@@ -319,7 +399,12 @@ export class PaymentService {
+     isConnected: boolean;
+   }> {
+     try {
+-      const provider = new ethers.BrowserProvider((window as any).ethereum);
++      const walletProvider = this.getWalletProvider();
++      if (!walletProvider) {
++        throw new Error('No wallet provider available');
++      }
++      
++      const provider = new ethers.BrowserProvider(walletProvider);
+       
+       const [network, blockNumber, feeData] = await Promise.all([
+         provider.getNetwork(),
+diff --git a/src/vite-env.d.ts b/src/vite-env.d.ts
+index aeaa345..15dce4f 100644
+--- a/src/vite-env.d.ts
++++ b/src/vite-env.d.ts
+@@ -22,10 +22,19 @@ interface EthereumProvider {
+   removeListener?: (event: string, handler: (...args: any[]) => void) => void;
+ }
+ 
++// Definición de la interfaz SafePal
++interface SafePalProvider {
++  isSafePal?: boolean;
++  request: (args: { method: string; params?: any[] }) => Promise<any>;
++  on?: (event: string, handler: (...args: any[]) => void) => void;
++  removeListener?: (event: string, handler: (...args: any[]) => void) => void;
++}
++
+ // Extend Window interface para ethereum
+ declare global {
+   interface Window {
+     ethereum?: EthereumProvider;
++    safePal?: SafePalProvider;
+   }
+   
+   // Añadir soporte para globalThis
+-- 
+2.51.0
+
