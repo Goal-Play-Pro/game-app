@@ -29,14 +29,21 @@ export class AuthController {
     };
 
     const sanitizeHeader = (value?: string) => (value ? value.split(',')[0].trim() : undefined);
+    const sanitizeBodyValue = (value?: string) => {
+      const trimmed = value?.trim();
+      return trimmed && trimmed.length > 0 ? trimmed : undefined;
+    };
 
     const forwardedHost = sanitizeHeader(coerceHeader(req?.headers?.['x-forwarded-host']));
     const hostHeader = sanitizeHeader(coerceHeader(req?.headers?.host));
     const originHeader = sanitizeHeader(coerceHeader(req?.headers?.origin));
     const refererHeader = sanitizeHeader(coerceHeader(req?.headers?.referer));
 
-    const effectiveDomain = forwardedHost || hostHeader || dto.domain;
-    const effectiveOrigin = originHeader || refererHeader || dto.origin;
+    const bodyDomain = sanitizeBodyValue(dto.domain);
+    const bodyOrigin = sanitizeBodyValue(dto.origin);
+
+    const effectiveDomain = bodyDomain || forwardedHost || hostHeader;
+    const effectiveOrigin = bodyOrigin || originHeader || refererHeader;
 
     return this.authService.createSiweChallenge(
       dto.address,

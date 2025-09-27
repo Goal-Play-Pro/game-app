@@ -445,17 +445,25 @@ export class AuthService {
     const asciiOriginHostname = domainToASCII(originUrl.hostname) || originUrl.hostname;
     originUrl.hostname = asciiOriginHostname;
 
-    let domainCandidate = domainOverride;
-    if (!domainCandidate && originCandidate) {
-      domainCandidate = originUrl.host;
+    const normalizeDomainSource = (value?: string) => {
+      if (!value) {
+        return undefined;
+      }
+      return value.includes('://') ? value : `https://${value}`;
+    };
+
+    const domainSource = normalizeDomainSource(domainOverride) ?? originUrl.origin;
+    const domainUrl = this.safeParseUrl(domainSource, originUrl.origin);
+    let asciiDomainHostname = domainToASCII(domainUrl.hostname) || domainUrl.hostname;
+
+    if (asciiDomainHostname !== asciiOriginHostname) {
+      asciiDomainHostname = asciiOriginHostname;
     }
 
-    const domainUrl = this.safeParseUrl(domainCandidate ? `https://${domainCandidate}` : originUrl.origin, defaultOrigin);
-    const asciiDomainHostname = domainToASCII(domainUrl.hostname) || domainUrl.hostname;
     domainUrl.hostname = asciiDomainHostname;
 
     return {
-      domain: domainUrl.hostname,
+      domain: asciiDomainHostname,
       origin: originUrl.origin,
     };
   }
