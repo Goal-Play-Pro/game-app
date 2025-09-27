@@ -58,6 +58,8 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
     chainId,
     chainType,
     switchToNetwork,
+    walletType,
+    detectWalletType,
   } = useWallet();
   const {
     initiatePayment,
@@ -223,7 +225,7 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
       await switchToNetwork(TARGET_CHAIN_ID);
     } catch (error: any) {
       console.error('Failed to switch network:', error);
-      const message = error?.message || 'Failed to switch network. Please approve the request in MetaMask.';
+      const message = error?.message || 'Failed to switch network. Please approve the request in your wallet.';
       setNetworkError(message);
     } finally {
       setIsSwitchingNetwork(false);
@@ -301,6 +303,28 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
 
   if (!isOpen) return null;
 
+  const resolvedWalletType = walletType ?? (() => {
+    const detected = detectWalletType?.();
+    return detected && detected !== 'unknown' ? detected : null;
+  })();
+
+  const getWalletDisplayName = (type: string | null | undefined) => {
+    if (type === 'safepal') {
+      return 'SafePal';
+    }
+    if (type === 'metamask') {
+      return 'MetaMask';
+    }
+    return 'Wallet';
+  };
+
+  const walletName = getWalletDisplayName(resolvedWalletType);
+  const walletActionLabel = resolvedWalletType ? walletName : 'your wallet';
+  const connectDescription = resolvedWalletType
+    ? `Connect ${walletName} to proceed with payment`
+    : 'Connect MetaMask, SafePal, or any compatible wallet to proceed with payment';
+  const connectButtonLabel = resolvedWalletType ? `Connect ${walletName}` : 'Connect Wallet';
+
   return (
     <AnimatePresence>
       <motion.div
@@ -353,6 +377,12 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                   <span className="text-gray-400">Network:</span>
                   <span className="text-yellow-400">BNB Smart Chain</span>
                 </div>
+                {resolvedWalletType && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Wallet:</span>
+                    <span className="text-blue-400">{walletName}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -368,13 +398,13 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                     <Wallet className="w-8 h-8 text-white" />
                   </div>
                   <h4 className="text-lg font-semibold text-white mb-2">Connect Your Wallet</h4>
-                  <p className="text-gray-400 mb-6">Connect MetaMask to proceed with payment</p>
+                  <p className="text-gray-400 mb-6">{connectDescription}</p>
                   <button
                     onClick={connectWallet}
                     className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={isConnecting}
                   >
-                    {isConnecting ? 'Connecting...' : 'Connect MetaMask'}
+                    {isConnecting ? 'Connecting...' : connectButtonLabel}
                   </button>
                 </motion.div>
               )}
@@ -449,6 +479,12 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                         {(parseFloat(order.totalPriceUSDT) - parseFloat(usdtBalance)).toFixed(2)} USDT
                       </span>
                     </div>
+                    {resolvedWalletType && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Wallet:</span>
+                        <span className="text-blue-400 font-semibold">{walletName}</span>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="space-y-3">
@@ -535,7 +571,7 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                       </a>
                     </div>
                     <p className="mt-3 text-xs text-gray-500 text-left">
-                      MetaMask will request one or two confirmations: a token approval (if needed) followed by the payment transaction. Review each prompt carefully before accepting.
+                      {walletActionLabel.charAt(0).toUpperCase() + walletActionLabel.slice(1)} will request one or two confirmations: a token approval (if needed) followed by the payment transaction. Review each prompt carefully before accepting.
                     </p>
                   </div>
 
@@ -588,9 +624,9 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
                   <div className="w-16 h-16 bg-gradient-to-r from-football-blue to-football-purple rounded-full flex items-center justify-center mx-auto mb-4">
                     <LoadingSpinner size="sm" color="white" />
                   </div>
-                  <h4 className="text-lg font-semibold text-white mb-2">Confirming in MetaMask</h4>
+                  <h4 className="text-lg font-semibold text-white mb-2">Confirming in {resolvedWalletType ? walletName : 'Your Wallet'}</h4>
                   <p className="text-gray-400 mb-6">
-                    Approve the prompts in MetaMask to authorize the payment gateway and send your USDT.
+                    Approve the prompts in {walletActionLabel} to authorize the payment gateway and send your USDT.
                   </p>
                   
                   <div className="glass rounded-lg p-4">

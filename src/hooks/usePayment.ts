@@ -126,7 +126,7 @@ export const usePayment = () => {
 
       // Verificar que MetaMask esté instalado
       if (!PaymentService.isMetaMaskInstalled()) {
-        throw new Error('MetaMask is required for payments');
+        throw new Error('A compatible wallet is required for payments');
       }
 
       // Procesar pago

@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   connected: 'walletConnected',
   chainId: 'walletChainId',
   caip10: 'walletAccountCaip10',
+  walletType: 'walletType',
 };
 
 export interface StoredWalletAccount {
@@ -11,9 +12,10 @@ export interface StoredWalletAccount {
   chainId: number | null;
   caip10: string | null;
   address: string | null;
+  walletType: string | null;
 }
 
-export const persistWallet = (chainId: number, address: string): void => {
+export const persistWallet = (chainId: number, address: string, walletType?: string | null): void => {
   if (typeof window === 'undefined') {
     return;
   }
@@ -22,6 +24,11 @@ export const persistWallet = (chainId: number, address: string): void => {
   window.localStorage.setItem(STORAGE_KEYS.connected, 'true');
   window.localStorage.setItem(STORAGE_KEYS.chainId, chainId.toString());
   window.localStorage.setItem(STORAGE_KEYS.caip10, caip10);
+  if (walletType) {
+    window.localStorage.setItem(STORAGE_KEYS.walletType, walletType);
+  } else {
+    window.localStorage.removeItem(STORAGE_KEYS.walletType);
+  }
 };
 
 export const clearPersistedWallet = (): void => {
@@ -32,6 +39,7 @@ export const clearPersistedWallet = (): void => {
   window.localStorage.removeItem(STORAGE_KEYS.connected);
   window.localStorage.removeItem(STORAGE_KEYS.chainId);
   window.localStorage.removeItem(STORAGE_KEYS.caip10);
+  window.localStorage.removeItem(STORAGE_KEYS.walletType);
 };
 
 export const getStoredWallet = (): StoredWalletAccount => {
@@ -41,6 +49,7 @@ export const getStoredWallet = (): StoredWalletAccount => {
       chainId: null,
       caip10: null,
       address: null,
+      walletType: null,
     };
   }
 
@@ -48,6 +57,7 @@ export const getStoredWallet = (): StoredWalletAccount => {
     const isConnected = window.localStorage.getItem(STORAGE_KEYS.connected) === 'true';
     const chainIdRaw = window.localStorage.getItem(STORAGE_KEYS.chainId);
     const storedCaip10 = window.localStorage.getItem(STORAGE_KEYS.caip10);
+    const storedWalletType = window.localStorage.getItem(STORAGE_KEYS.walletType);
 
     if (!isConnected || !storedCaip10 || !chainIdRaw) {
       // attempt legacy migration when legacy fields exist
@@ -63,6 +73,7 @@ export const getStoredWallet = (): StoredWalletAccount => {
             chainId: legacyChainId,
             caip10: migratedCaip10,
             address: parseCaip10(migratedCaip10).address,
+            walletType: storedWalletType,
           };
         }
       }
@@ -72,6 +83,7 @@ export const getStoredWallet = (): StoredWalletAccount => {
         chainId: null,
         caip10: storedCaip10 && isCaip10(storedCaip10) ? storedCaip10 : null,
         address: storedCaip10 && isCaip10(storedCaip10) ? parseCaip10(storedCaip10).address : null,
+        walletType: storedWalletType,
       };
     }
 
@@ -93,6 +105,7 @@ export const getStoredWallet = (): StoredWalletAccount => {
       chainId,
       caip10: identifier,
       address: parsed.address,
+      walletType: storedWalletType,
     };
   } catch {
     return {
@@ -100,6 +113,7 @@ export const getStoredWallet = (): StoredWalletAccount => {
       chainId: null,
       caip10: null,
       address: null,
+      walletType: null,
     };
   }
 };

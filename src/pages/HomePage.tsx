@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, TrendingUp, Users, Zap, Star, Trophy, Target, Gamepad2 } from 'lucide-react';
+import { ArrowRight, TrendingUp, Users, Zap, Star, Trophy, Target, Gamepad2, Wallet, Shield } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import ApiService from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -989,10 +989,20 @@ const HomePage = () => {
                 Paso 1: Conecta tu Wallet
               </h3>
               <p className="text-gray-400 mb-6">
-                Conecta tu wallet MetaMask para empezar a jugar y ganar recompensas
+                Conecta tu wallet (MetaMask, SafePal o compatible) para empezar a jugar y ganar recompensas
               </p>
               <div className="flex justify-center">
                 <WalletConnect size="lg" />
+              </div>
+              <div className="mt-4 flex justify-center space-x-3 text-xs text-gray-400">
+                <div className="flex items-center space-x-1 bg-blue-500/20 text-blue-300 px-2 py-1 rounded-full">
+                  <Wallet className="w-3 h-3" />
+                  <span>MetaMask</span>
+                </div>
+                <div className="flex items-center space-x-1 bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full">
+                  <Shield className="w-3 h-3" />
+                  <span>SafePal</span>
+                </div>
               </div>
             </div>
           </motion.div>

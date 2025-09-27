@@ -54,7 +54,7 @@ El sistema de penalty en Goal Play es revolucionario:
 🚀 **Oportunidad Única**:
 ¡Las primeras 4 semanas de staking dan DOBLE recompensas!
 
-¿Quieres que te ayude a añadirlo a MetaMask? 🦊`;
+¿Quieres que te ayude a añadirlo a MetaMask o SafePal? 🦊🛡️`;
     }
     
     return `¡Hola! 👋 Soy tu asistente experto en Goal Play.

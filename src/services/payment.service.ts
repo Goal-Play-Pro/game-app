@@ -1,11 +1,63 @@
 import { ethers } from 'ethers';
 import { PAYMENT_CONFIG } from '../config/payment.config';
 
+type WalletType = 'metamask' | 'safepal' | 'unknown';
+
+interface Eip1193Provider {
+  request: (args: { method: string; params?: any[] }) => Promise<any>;
+  isMetaMask?: boolean;
+  isSafePal?: boolean;
+  on?: (event: string, handler: (...args: any[]) => void) => void;
+  removeListener?: (event: string, handler: (...args: any[]) => void) => void;
+}
+
+interface WalletWindow extends Window {
+  ethereum?: Eip1193Provider;
+  safePal?: Eip1193Provider;
+}
+
 /**
- * Payment Service - Manejo de pagos reales con MetaMask
+ * Payment Service - Manejo de pagos reales con wallets compatibles
  * Integra con contratos USDT en BSC para pagos reales
  */
 export class PaymentService {
+  private static resolveWindowProvider(): Eip1193Provider | null {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    const win = window as unknown as WalletWindow;
+    if (win.safePal?.request) {
+      return win.safePal;
+    }
+    if (win.ethereum) {
+      return win.ethereum;
+    }
+    return null;
+  }
+
+  private static detectWalletType(provider?: Eip1193Provider | null): WalletType {
+    const candidate = provider ?? this.resolveWindowProvider();
+    const win = typeof window !== 'undefined' ? (window as unknown as WalletWindow) : undefined;
+
+    if (candidate?.isSafePal || win?.safePal?.isSafePal) {
+      return 'safepal';
+    }
+
+    if (candidate?.isMetaMask || win?.ethereum?.isMetaMask) {
+      return 'metamask';
+    }
+
+    if (candidate || win?.ethereum || win?.safePal) {
+      return 'metamask';
+    }
+
+    return 'unknown';
+  }
+
+  private static getWalletProvider(): Eip1193Provider | null {
+    return this.resolveWindowProvider();
+  }
+
   // USDT Contract en BSC Mainnet
   private static readonly USDT_CONTRACT = '0x55d398326f99059fF775485246999027B3197955';
   private static readonly BSC_CHAIN_ID = 56;
@@ -26,10 +78,10 @@ export class PaymentService {
   ];
 
   /**
-   * Verificar si MetaMask está instalado
+   * Verificar si existe un provider compatible
    */
   static isMetaMaskInstalled(): boolean {
-    return typeof window !== 'undefined' && !!(window as any).ethereum;
+    return this.getWalletProvider() !== null;
   }
 
   /**
@@ -42,21 +94,21 @@ export class PaymentService {
     chainId?: number;
     error?: string;
   }> {
-    const ethereum = (window as any).ethereum;
+    const provider = this.getWalletProvider();
 
-    if (!ethereum) {
-      return { success: false, error: 'MetaMask not installed' };
+    if (!provider) {
+      return { success: false, error: 'Wallet provider not detected' };
     }
 
     try {
-      const currentChainIdHex = await ethereum.request({ method: 'eth_chainId' });
+      const currentChainIdHex = await provider.request({ method: 'eth_chainId' });
       const currentChainId = parseInt(currentChainIdHex, 16);
 
       if (currentChainId === this.BSC_CHAIN_ID) {
         return { success: true, chainId: currentChainId };
       }
 
-      await this.switchToBSC();
+      await this.switchToBSC(provider);
       return { success: true, chainId: this.BSC_CHAIN_ID };
     } catch (error: any) {
       console.error('Error ensuring BSC network:', error);
@@ -70,18 +122,21 @@ export class PaymentService {
   /**
    * Cambiar a BSC network
    */
-  static async switchToBSC(): Promise<void> {
-    const ethereum = (window as any).ethereum;
-    
+  static async switchToBSC(providerArg?: Eip1193Provider): Promise<void> {
+    const provider = providerArg ?? this.getWalletProvider();
+    if (!provider) {
+      throw new Error('Wallet provider not available');
+    }
+
     try {
-      await ethereum.request({
+      await provider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: '0x38' }], // BSC Mainnet
       });
     } catch (switchError: any) {
       // Si BSC no está añadido, añadirlo
       if (switchError.code === 4902) {
-        await ethereum.request({
+        await provider.request({
           method: 'wallet_addEthereumChain',
           params: [{
             chainId: '0x38',
@@ -110,8 +165,17 @@ export class PaymentService {
     error?: string;
   }> {
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const contract = new ethers.Contract(this.USDT_CONTRACT, this.USDT_ABI, provider);
+      const provider = this.getWalletProvider();
+      if (!provider) {
+        return {
+          balance: '0',
+          formatted: '0.00',
+          error: 'Wallet provider not available',
+        };
+      }
+
+      const browserProvider = new ethers.BrowserProvider(provider);
+      const contract = new ethers.Contract(this.USDT_CONTRACT, this.USDT_ABI, browserProvider);
       
       const balance = await contract.balanceOf(userAddress);
       const decimals = await contract.decimals();
@@ -144,10 +208,10 @@ export class PaymentService {
     approvalHash?: string;
     error?: string;
   }> {
-    const ethereum = (window as any).ethereum;
+    const provider = this.getWalletProvider();
 
-    if (!ethereum) {
-      return { success: false, error: 'MetaMask not detected' };
+    if (!provider) {
+      return { success: false, error: 'Wallet provider not detected' };
     }
 
     if (!this.PAYMENT_GATEWAY_CONTRACT) {
@@ -155,7 +219,7 @@ export class PaymentService {
     }
 
     try {
-      const accounts: string[] = await ethereum.request({ method: 'eth_accounts' });
+      const accounts: string[] = await provider.request({ method: 'eth_accounts' });
       const activeAccount = accounts?.[0];
 
       if (!activeAccount) {
@@ -167,8 +231,8 @@ export class PaymentService {
         return { success: false, error: ensureNetwork.error || 'Failed to switch to BSC' };
       }
 
-      const provider = new ethers.BrowserProvider(ethereum);
-      const signer = await provider.getSigner();
+      const browserProvider = new ethers.BrowserProvider(provider);
+      const signer = await browserProvider.getSigner();
       const usdtContract = new ethers.Contract(this.USDT_CONTRACT, this.USDT_ABI, signer);
       const gatewayContract = new ethers.Contract(this.PAYMENT_GATEWAY_CONTRACT, this.PAYMENT_GATEWAY_ABI, signer);
       const normalizedMerchant = ethers.getAddress(merchantWallet);
@@ -232,14 +296,25 @@ export class PaymentService {
     error?: string;
   }> {
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const contract = new ethers.Contract(this.USDT_CONTRACT, this.USDT_ABI, provider);
+      const provider = this.getWalletProvider();
+      if (!provider) {
+        return {
+          gasLimit: '65000',
+          gasPrice: '5000000000',
+          gasCostBNB: '0.001',
+          gasCostUSD: '0.30',
+          error: 'Wallet provider not available',
+        };
+      }
+
+      const browserProvider = new ethers.BrowserProvider(provider);
+      const contract = new ethers.Contract(this.USDT_CONTRACT, this.USDT_ABI, browserProvider);
       
       const amountWei = ethers.parseUnits(amount, 18);
       
       // Estimar gas
       const gasLimit = await contract.transfer.estimateGas(toAddress, amountWei);
-      const gasPrice = await provider.getFeeData();
+      const gasPrice = await browserProvider.getFeeData();
       
       // Calcular costo en BNB
       const gasCostWei = gasLimit * (gasPrice.gasPrice || 0n);
@@ -278,19 +353,28 @@ export class PaymentService {
     error?: string;
   }> {
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const provider = this.getWalletProvider();
+      if (!provider) {
+        return {
+          success: false,
+          confirmations: 0,
+          error: 'Wallet provider not available',
+        };
+      }
+
+      const browserProvider = new ethers.BrowserProvider(provider);
       
-      const tx = await provider.getTransaction(txHash);
+      const tx = await browserProvider.getTransaction(txHash);
       if (!tx) {
         return { success: false, confirmations: 0, error: 'Transaction not found' };
       }
 
-      const receipt = await provider.getTransactionReceipt(txHash);
+      const receipt = await browserProvider.getTransactionReceipt(txHash);
       if (!receipt) {
         return { success: false, confirmations: 0, error: 'Transaction pending' };
       }
 
-      const currentBlock = await provider.getBlockNumber();
+      const currentBlock = await browserProvider.getBlockNumber();
       const confirmations = currentBlock - receipt.blockNumber;
 
       return {
@@ -319,12 +403,22 @@ export class PaymentService {
     isConnected: boolean;
   }> {
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const provider = this.getWalletProvider();
+      if (!provider) {
+        return {
+          chainId: 0,
+          blockNumber: 0,
+          gasPrice: '0',
+          isConnected: false,
+        };
+      }
+
+      const browserProvider = new ethers.BrowserProvider(provider);
       
       const [network, blockNumber, feeData] = await Promise.all([
-        provider.getNetwork(),
-        provider.getBlockNumber(),
-        provider.getFeeData(),
+        browserProvider.getNetwork(),
+        browserProvider.getBlockNumber(),
+        browserProvider.getFeeData(),
       ]);
 
       return {

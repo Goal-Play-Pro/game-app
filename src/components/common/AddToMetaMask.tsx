@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, ExternalLink, CheckCircle, AlertCircle, Wallet, Shield } from 'lucide-react';
+import { useWallet } from '../../hooks/useWallet';
 
 interface AddToMetaMaskProps {
   className?: string;
@@ -11,6 +12,43 @@ interface AddToMetaMaskProps {
 const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToMetaMaskProps) => {
   const [isCopying, setIsCopying] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const { walletType, detectWalletType } = useWallet();
+
+  const resolvedWalletType = walletType ?? (() => {
+    const detected = detectWalletType?.();
+    return detected && detected !== 'unknown' ? detected : null;
+  })();
+
+  const getWalletName = (type: string | null | undefined) => {
+    if (type === 'safepal') {
+      return 'SafePal';
+    }
+    if (type === 'metamask') {
+      return 'MetaMask';
+    }
+    return 'tu wallet';
+  };
+
+  const walletName = getWalletName(resolvedWalletType);
+  const renderWalletBadge = () => {
+    if (resolvedWalletType === 'safepal') {
+      return (
+        <div className="mt-3 inline-flex items-center space-x-2 bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full text-xs">
+          <Shield className="w-4 h-4" />
+          <span>SafePal detected</span>
+        </div>
+      );
+    }
+    if (resolvedWalletType === 'metamask') {
+      return (
+        <div className="mt-3 inline-flex items-center space-x-2 bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-xs">
+          <Wallet className="w-4 h-4" />
+          <span>MetaMask detected</span>
+        </div>
+      );
+    }
+    return null;
+  };
 
   // Token information from BSC contract
   const tokenInfo = {
@@ -57,8 +95,9 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
             Token GOAL details
           </h3>
           <p className="text-gray-400">
-            Usa la información a continuación para añadir el token GOAL manualmente en tu wallet.
+            Usa la información a continuación para añadir el token GOAL manualmente en {walletName}.
           </p>
+          {renderWalletBadge()}
         </div>
       )}
 
@@ -149,7 +188,7 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
             className="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-center"
           >
             <p className="text-green-400 text-sm">
-              Datos copiados. Pégalos en MetaMask → Import Tokens → Custom token.
+              Datos copiados. En tu wallet, abre "Import Tokens" (por ejemplo, MetaMask → Import Token → Custom token) y pega la información.
             </p>
           </motion.div>
         )}
@@ -167,7 +206,7 @@ const AddToMetaMask = ({ className = '', showTitle = true, size = 'md' }: AddToM
         )}
 
         <div className="mt-6 text-xs text-gray-500 space-y-2">
-          <p>· En MetaMask abre "Import Tokens" &gt; "Import custom token" y pega los datos copiados.</p>
+          <p>· En {walletName === 'tu wallet' ? 'tu wallet' : walletName} abre "Import Tokens" &gt; "Custom token" y pega los datos copiados.</p>
           <p>· Verifica que estés en BNB Smart Chain antes de añadir el contrato.</p>
           <p>· También puedes escribir los valores manualmente si el portapapeles no está disponible.</p>
         </div>

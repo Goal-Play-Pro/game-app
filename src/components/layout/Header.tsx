@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Menu, X, User, Bell, Settings, Trophy, ShoppingBag } from 'lucide-react';
+import { useWallet } from '../../hooks/useWallet';
 import WalletConnect from '../wallet/WalletConnect';
 import ReferralBanner from '../referral/ReferralBanner';
 
@@ -10,6 +11,7 @@ const Header = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const location = useLocation();
+  const { walletType, detectWalletType } = useWallet();
 
   const navigation = [
     { name: 'Home', href: '/', icon: null },
@@ -23,6 +25,21 @@ const Header = () => {
   ];
 
   const isActive = (path: string) => location.pathname === path;
+
+  const resolvedWalletType = walletType ?? (() => {
+    const detected = detectWalletType?.();
+    return detected && detected !== 'unknown' ? detected : null;
+  })();
+
+  const walletName = (() => {
+    if (resolvedWalletType === 'safepal') {
+      return 'SafePal';
+    }
+    if (resolvedWalletType === 'metamask') {
+      return 'MetaMask';
+    }
+    return 'Wallet';
+  })();
 
   return (
     <>
@@ -223,7 +240,9 @@ const Header = () => {
                   className="flex items-center space-x-2 text-xs text-gray-400 hover:text-football-green transition-colors"
                 >
                   <div className="w-2 h-2 rounded-full bg-football-green" />
-                  <span>API: game.goalplay.pro • Create Referral Code (5%)</span>
+                  <span>
+                    API: game.goalplay.pro • {walletName} Ready • Create Referral Code (5%)
+                  </span>
                 </Link>
               </div>
             </div>

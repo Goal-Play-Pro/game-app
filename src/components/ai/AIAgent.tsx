@@ -95,7 +95,7 @@ El sistema de penalty en Goal Play es revolucionario:
 🚀 **Oportunidad Única**:
 ¡Las primeras 4 semanas de staking dan DOBLE recompensas!
 
-¿Quieres que te ayude a añadirlo a MetaMask? 🦊`;
+¿Quieres que te ayude a añadirlo a MetaMask o SafePal? 🦊🛡️`;
     }
     
     if (message.includes('division') || message.includes('división')) {
@@ -153,13 +153,13 @@ El sistema de penalty en Goal Play es revolucionario:
 🎯 **Guía Rápida para Empezar**:
 
 1️⃣ **Conecta tu Wallet**:
-   - Instala MetaMask
+   - Instala MetaMask o SafePal
    - Conecta en la esquina superior derecha
    - Cambia a BSC network
 
 2️⃣ **Añade Token GOAL**:
    - Ve a Tokenomics
-   - Clic en "Añadir a MetaMask"
+   - Clic en "Añadir a tu Wallet"
    - ¡Listo para recibir recompensas!
 
 3️⃣ **Compra tu Primer Pack**:
@@ -179,7 +179,33 @@ El sistema de penalty en Goal Play es revolucionario:
 
 ¿En qué paso necesitas ayuda? 🎮`;
     }
-    
+
+    if (message.includes('wallet') || message.includes('safepal') || message.includes('metamask')) {
+      return `¡Excelente pregunta sobre wallets! 🦊🛡️
+
+Goal Play es compatible con las mejores wallets:
+
+🦊 **MetaMask**:
+- La wallet más popular del mundo
+- Perfecta para principiantes
+- Extensión de navegador fácil
+
+🛡️ **SafePal**:
+- Wallet segura y confiable
+- Soporte multi-chain nativo
+- Interfaz intuitiva
+
+🔗 **Ambas Funcionan Igual**:
+- Conecta con un clic
+- Paga con USDT en BSC
+- Recibe recompensas automáticamente
+- Gestiona tus NFTs
+
+💡 **Consejo**: ¡Usa la que prefieras! Goal Play detecta automáticamente tu wallet y se adapta.
+
+¿Necesitas ayuda instalando alguna? 🚀`;
+    }
+
     return `¡Hola! 👋 Soy tu asistente experto en Goal Play.
 
 Puedo ayudarte con TODO sobre nuestro ecosistema:
@@ -187,6 +213,8 @@ Puedo ayudarte con TODO sobre nuestro ecosistema:
 💰 Economía y tokenomics  
 🏆 Estrategias de inversión
 🎮 Guías paso a paso
+
+🦊 Wallets compatibles (MetaMask, SafePal)
 
 ¿Qué te gustaría saber? ⚽🚀`;
   };

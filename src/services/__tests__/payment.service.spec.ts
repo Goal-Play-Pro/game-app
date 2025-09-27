@@ -89,7 +89,7 @@ describe('PaymentService (frontend helpers)', () => {
       global.window = {} as Window;
 
       const result = await PaymentService.ensureBscNetwork();
-      expect(result).toEqual({ success: false, error: 'MetaMask not installed' });
+      expect(result).toEqual({ success: false, error: 'Wallet provider not detected' });
 
       global.window = { ethereum } as unknown as Window;
     });

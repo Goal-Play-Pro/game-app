@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Wallet, 
-  Plus, 
-  Trash2, 
-  Star, 
-  ExternalLink, 
+import {
+  Wallet,
+  Plus,
+  Trash2,
+  Star,
+  ExternalLink,
   Copy,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Shield,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ApiService from '../../services/api';
@@ -17,12 +18,23 @@ import { ChainType } from '../../types';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { logWalletRequirement } from '../../utils/wallet.utils';
 import { getStoredWallet } from '../../utils/walletStorage';
+import { useWallet } from '../../hooks/useWallet';
 
 const WalletManager = () => {
   const [isLinking, setIsLinking] = useState(false);
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStatus();
-  const { isConnected: walletConnected, address: walletAddress } = getStoredWallet();
+  const storedWallet = getStoredWallet();
+  const walletConnected = storedWallet.isConnected;
+  const walletAddress = storedWallet.address;
+  const storedWalletType = storedWallet.walletType;
+  const {
+    connectWallet,
+    walletType,
+    detectWalletType,
+    isConnecting,
+    isFrameBlocked,
+  } = useWallet();
 
   // Fetch user wallets
   const { data: wallets, isLoading: walletsLoading } = useQuery({
@@ -69,6 +81,72 @@ const WalletManager = () => {
       default: return '⚪';
     }
   };
+
+  const normalizeWalletType = (type: string | null | undefined) => {
+    if (type === 'metamask' || type === 'safepal') {
+      return type;
+    }
+    return null;
+  };
+
+  const activeWalletType = normalizeWalletType(walletType) ?? normalizeWalletType(storedWalletType);
+
+  const getWalletName = (type: string | null) => {
+    if (type === 'safepal') {
+      return 'SafePal';
+    }
+    if (type === 'metamask') {
+      return 'MetaMask';
+    }
+    return 'Wallet';
+  };
+
+  const renderWalletBadge = (type: string | null) => {
+    if (type === 'safepal') {
+      return (
+        <div className="flex items-center space-x-1 bg-purple-500/20 text-purple-400 px-2 py-1 rounded-full text-xs">
+          <Shield className="w-3 h-3" />
+          <span>SafePal</span>
+        </div>
+      );
+    }
+    if (type === 'metamask') {
+      return (
+        <div className="flex items-center space-x-1 bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full text-xs">
+          <Wallet className="w-3 h-3" />
+          <span>MetaMask</span>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const getAvailableWallets = () => {
+    if (typeof window === 'undefined') {
+      return [] as Array<{ type: string; name: string }>;
+    }
+    const win = window as any;
+    const wallets: Array<{ type: string; name: string }> = [];
+    if (win.ethereum?.isMetaMask) {
+      wallets.push({ type: 'metamask', name: 'MetaMask' });
+    }
+    if (win.safePal?.isSafePal) {
+      wallets.push({ type: 'safepal', name: 'SafePal' });
+    }
+    if (wallets.length === 0 && (win.ethereum || win.safePal)) {
+      wallets.push({ type: 'metamask', name: 'MetaMask' });
+    }
+    return wallets;
+  };
+
+  const availableWallets = getAvailableWallets();
+  const detectedWallet = detectWalletType ? detectWalletType() : 'unknown';
+  const normalizedDetectedWallet = detectedWallet !== 'unknown' ? detectedWallet : null;
+  const linkButtonLabel = isConnecting
+    ? 'Connecting...'
+    : normalizedDetectedWallet
+    ? `Connect ${getWalletName(normalizedDetectedWallet)}`
+    : 'Connect Wallet';
 
   const copyAddress = (address: string) => {
     navigator.clipboard.writeText(address);
@@ -153,6 +231,9 @@ const WalletManager = () => {
                         <span>Primary</span>
                       </div>
                     )}
+                    {walletAddress &&
+                      wallet.address.toLowerCase() === walletAddress.toLowerCase() &&
+                      renderWalletBadge(activeWalletType)}
                   </div>
                   
                   <div className="flex items-center space-x-4 text-sm text-gray-400">
@@ -221,12 +302,19 @@ const WalletManager = () => {
         <div className="text-center py-12">
           <Wallet className="w-16 h-16 text-gray-500 mx-auto mb-4" />
           <h4 className="text-lg font-semibold text-white mb-2">No Wallets Connected</h4>
-          <p className="text-gray-400 mb-6">Connect your first wallet to start playing</p>
+          <p className="text-gray-400 mb-6">
+            Connect your first wallet (MetaMask, SafePal, or compatible) to start playing
+          </p>
           <button
-            onClick={() => setIsLinking(true)}
+            onClick={() => {
+              if (!isFrameBlocked) {
+                connectWallet();
+              }
+            }}
             className="btn-primary"
+            disabled={isConnecting || isFrameBlocked}
           >
-            Connect Wallet
+            {linkButtonLabel}
           </button>
         </div>
       )}
@@ -240,18 +328,49 @@ const WalletManager = () => {
         >
           <h4 className="text-lg font-semibold text-white mb-4">Link New Wallet</h4>
           <p className="text-gray-400 text-sm mb-4">
-            Connect additional wallets to your account for multi-chain access
+            Connect additional wallets (MetaMask, SafePal) to your account for multi-chain access
           </p>
+
+          <div className="mb-4">
+            <div className="text-sm text-gray-400 mb-2">Available Wallets:</div>
+            <div className="flex flex-wrap gap-2">
+              {availableWallets.length > 0 ? (
+                availableWallets.map((wallet) => (
+                  <div
+                    key={wallet.type}
+                    className={`flex items-center space-x-1 text-xs ${
+                      wallet.type === 'safepal'
+                        ? 'bg-purple-500/20 text-purple-300'
+                        : 'bg-blue-500/20 text-blue-300'
+                    } px-2 py-1 rounded-full`}
+                  >
+                    {wallet.type === 'safepal' ? (
+                      <Shield className="w-3 h-3" />
+                    ) : (
+                      <Wallet className="w-3 h-3" />
+                    )}
+                    <span>{wallet.name}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-gray-500">No compatible wallets detected</div>
+              )}
+            </div>
+          </div>
           
           <div className="flex space-x-3">
             <button
-              onClick={() => {
-                // Trigger wallet connection flow
+              onClick={async () => {
+                if (isFrameBlocked) {
+                  return;
+                }
                 setIsLinking(false);
+                await connectWallet();
               }}
-              className="btn-primary flex-1"
+              className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isConnecting || isFrameBlocked}
             >
-              Connect MetaMask
+              {linkButtonLabel}
             </button>
             
             <button

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, AlertCircle } from 'lucide-react';
+import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, AlertCircle, Shield } from 'lucide-react';
 import { useWallet } from '../../hooks/useWallet';
 
 interface WalletConnectProps {
@@ -26,6 +26,8 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
     signInWallet,
     disconnectWallet,
     switchToNetwork,
+    walletType,
+    detectWalletType,
   } = useWallet();
 
   const sizeClasses = {
@@ -39,6 +41,45 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
     md: 'w-5 h-5',
     lg: 'w-6 h-6'
   };
+
+  const getWalletIcon = (type: string | null) => {
+    if (type === 'safepal') {
+      return <Shield className={iconSizes[size]} />;
+    }
+    return <Wallet className={iconSizes[size]} />;
+  };
+
+  const getWalletName = (type: string | null) => {
+    if (type === 'safepal') {
+      return 'SafePal';
+    }
+    if (type === 'metamask') {
+      return 'MetaMask';
+    }
+    return 'Wallet';
+  };
+
+  const getAvailableWallets = () => {
+    if (typeof window === 'undefined') {
+      return [] as Array<{ type: string; name: string }>;
+    }
+    const win = window as any;
+    const wallets: Array<{ type: string; name: string }> = [];
+    if (win.ethereum?.isMetaMask) {
+      wallets.push({ type: 'metamask', name: 'MetaMask' });
+    }
+    if (win.safePal?.isSafePal) {
+      wallets.push({ type: 'safepal', name: 'SafePal' });
+    }
+    if (wallets.length === 0 && win.ethereum) {
+      wallets.push({ type: 'metamask', name: 'MetaMask' });
+    }
+    return wallets;
+  };
+
+  const detectedWallet = detectWalletType ? detectWalletType() : 'unknown';
+  const normalizedDetectedWallet = detectedWallet !== 'unknown' ? detectedWallet : null;
+  const availableWallets = getAvailableWallets();
 
   const formatAddress = (addr: string | null) => {
     if (!addr) return '';
@@ -113,12 +154,24 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
             </>
           ) : (
             <>
-              <Wallet className={iconSizes[size]} />
-              <span>Connect Wallet</span>
+              {getWalletIcon(normalizedDetectedWallet)}
+              <span>
+                {normalizedDetectedWallet ? `Connect ${getWalletName(normalizedDetectedWallet)}` : 'Connect Wallet'}
+              </span>
             </>
           )}
         </motion.button>
-        
+
+        {availableWallets.length > 0 && (
+          <div className="mt-2 text-xs text-gray-400 text-center">
+            {availableWallets.length === 1 ? (
+              <span>{availableWallets[0].name} detected</span>
+            ) : (
+              <span>{availableWallets.map((wallet) => wallet.name).join(' & ')} available</span>
+            )}
+          </div>
+        )}
+
         {error && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -129,7 +182,6 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
               <AlertCircle className="w-4 h-4" />
               <span>{error}</span>
             </div>
-            <span>Conectar Wallet</span>
           </motion.div>
         )}
       </div>
@@ -194,6 +246,7 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
         }`}
       >
         <div className="w-2 h-2 bg-green-400 rounded-full" />
+        {getWalletIcon(walletType ?? normalizedDetectedWallet)}
         <span className="font-mono">{formatAddress(address!)}</span>
         {showDropdown && <ChevronDown className={`${iconSizes[size]} transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />}
       </motion.button>
@@ -210,11 +263,19 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
           <div className="p-4">
             {/* Wallet Info */}
             <div className="flex items-center space-x-3 mb-4 pb-4 border-b border-white/10">
-              <div className="w-10 h-10 bg-gradient-to-r from-football-green to-football-blue rounded-full flex items-center justify-center">
-                <Wallet className="w-5 h-5 text-white" />
+              <div
+                className={`w-10 h-10 bg-gradient-to-r ${
+                  (walletType ?? normalizedDetectedWallet) === 'safepal'
+                    ? 'from-blue-500 to-purple-500'
+                    : 'from-football-green to-football-blue'
+                } rounded-full flex items-center justify-center`}
+              >
+                {getWalletIcon(walletType ?? normalizedDetectedWallet)}
               </div>
               <div className="flex-1">
-                <div className="text-white font-semibold">Connected Wallet</div>
+                <div className="text-white font-semibold">
+                  {getWalletName(walletType ?? normalizedDetectedWallet)} Connected
+                </div>
                 <div className="text-xs text-gray-400 font-mono break-all leading-tight">
                   {caip10Address}
                 </div>
