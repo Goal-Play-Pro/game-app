@@ -583,7 +583,8 @@ export class ApiService {
     const payload: Record<string, unknown> = {
       address,
       chainId,
-      statement: 'Sign in to Goal Play',
+      statement:
+        'Review https://game.goalplay.pro in your browser bar before signing. This authenticates your session and moves no funds.',
     };
 
     if (typeof window !== 'undefined') {
