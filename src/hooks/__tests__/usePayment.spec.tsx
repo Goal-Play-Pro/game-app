@@ -120,4 +120,37 @@ describe('usePayment', () => {
 
     expect(PaymentService.processOrderPayment).not.toHaveBeenCalled();
   });
+
+  it('completes the payment flow and updates local state on success', async () => {
+    persistWallet();
+
+    PaymentService.processOrderPayment.mockResolvedValue({
+      success: true,
+      paymentHash: '0xhash',
+      approvalHash: '0xapprove',
+    });
+
+    ApiService.notifyPaymentCompleted.mockResolvedValue({
+      status: 'pending_confirmations',
+      confirmations: 3,
+      requiredConfirmations: 12,
+    });
+
+    const { Wrapper, queryClient } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => usePayment(), { wrapper: Wrapper });
+
+    await act(async () => {
+      const response = await result.current.initiatePayment('order-42', '0xmerchant', '1.5');
+      expect(response.transactionHash).toBe('0xhash');
+      expect(response.approvalHash).toBe('0xapprove');
+    });
+
+    expect(result.current.transactionHash).toBe('0xhash');
+    expect(result.current.approvalTransactionHash).toBe('0xapprove');
+    expect(result.current.status).toBe('confirming');
+    expect(result.current.confirmations).toBe(3);
+    expect(result.current.needsApproval).toBe(true);
+    expect(invalidateSpy).toHaveBeenCalled();
+  });
 });

@@ -127,6 +127,44 @@ describe('PaymentService (frontend helpers)', () => {
     });
   });
 
+  describe('switchToBSC', () => {
+    it('throws when no provider is available', async () => {
+      const previousWindow = globalAny.window;
+      delete globalAny.window;
+
+      await expect(PaymentService.switchToBSC(undefined as any)).rejects.toThrow('Wallet provider not available');
+
+      if (previousWindow) {
+        globalAny.window = previousWindow;
+      }
+    });
+
+    it('adds the BSC network when the wallet reports it is missing', async () => {
+      const provider = {
+        request: jest
+          .fn()
+          // Initial switch attempt rejects with "missing chain" error
+          .mockRejectedValueOnce({ code: 4902, message: 'Chain 0x38 not available' })
+          // Adding the chain succeeds
+          .mockResolvedValueOnce(undefined)
+          // Switching again succeeds
+          .mockResolvedValueOnce(undefined),
+      } as unknown as jest.Mocked<Eip1193Provider>;
+
+      await expect(PaymentService.switchToBSC(provider)).resolves.toBeUndefined();
+
+      expect(provider.request).toHaveBeenNthCalledWith(1, {
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x38' }],
+      });
+      expect(provider.request).toHaveBeenNthCalledWith(2, expect.objectContaining({ method: 'wallet_addEthereumChain' }));
+      expect(provider.request).toHaveBeenNthCalledWith(3, {
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x38' }],
+      });
+    });
+  });
+
   describe('processOrderPayment', () => {
     const paymentGateway = '0x0000000000000000000000000000000000000001';
 
@@ -188,6 +226,43 @@ describe('PaymentService (frontend helpers)', () => {
       expect(switchSpy).toHaveBeenCalledTimes(1);
       expect(requests.filter((method) => method === 'eth_accounts')).toHaveLength(1);
       expect(requests).toContain('wallet_switchEthereumChain');
+    });
+
+    it('requests approval when allowance is lower than the required amount', async () => {
+      const accounts = ['0xf39Fd6e51aad88F6f4ce6aB8827279cffFb92266'];
+      ethereum.request.mockResolvedValueOnce(accounts);
+
+      const ensureSpy = jest
+        .spyOn(PaymentService, 'ensureBscNetwork')
+        .mockResolvedValue({ success: true, chainId: 56 });
+
+      const signerMock = {};
+      browserProviderSpy.mockImplementation(() => ({ getSigner: jest.fn().mockResolvedValue(signerMock) }));
+
+      const approvalTx = { hash: '0xapprove', wait: jest.fn().mockResolvedValue({ status: 1 }) };
+      const paymentTx = { hash: '0xpayment', wait: jest.fn().mockResolvedValue({ status: 1 }) };
+
+      const usdtContract = {
+        balanceOf: jest.fn().mockResolvedValue(ethers.parseUnits('10', 18)),
+        allowance: jest.fn().mockResolvedValue(0n),
+        approve: jest.fn().mockResolvedValue(approvalTx),
+      };
+      const gatewayContract = {
+        payOrder: jest.fn().mockResolvedValue(paymentTx),
+      };
+
+      const usdtAddress = (PaymentService as any).USDT_CONTRACT.toLowerCase();
+      contractSpy.mockImplementation((address: string) =>
+        address.toLowerCase() === usdtAddress ? usdtContract : gatewayContract,
+      );
+
+      const result = await PaymentService.processOrderPayment('order-approval', paymentGateway, '2');
+
+      expect(result).toEqual({ success: true, paymentHash: '0xpayment', approvalHash: '0xapprove' });
+      expect(usdtContract.approve).toHaveBeenCalledWith((PaymentService as any).PAYMENT_GATEWAY_CONTRACT, ethers.parseUnits('2', 18));
+      expect(approvalTx.wait).toHaveBeenCalled();
+      expect(gatewayContract.payOrder).toHaveBeenCalled();
+      expect(ensureSpy).toHaveBeenCalled();
     });
   });
 
