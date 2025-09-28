@@ -19,7 +19,7 @@ jest.mock('../../services/api', () => {
   };
 });
 
-import { getGuardedProvider, useWallet } from '../useWallet';
+import { enforceWalletRequestGuards, useWallet } from '../useWallet';
 
 type Eip1193Provider = {
   request: jest.Mock;
@@ -162,19 +162,16 @@ describe('useWallet', () => {
     expect(localStorage.getItem('walletType')).toBe('metamask');
   });
 
-  it('blocks eth_sign requests even after provider guard is applied', async () => {
-    const provider = setupProvider();
-    requestMock.mockResolvedValue(undefined);
-
-    queryClient = new QueryClient();
-    renderHook(() => useWallet(), { wrapper: Wrapper });
-
-    const guardedProvider = getGuardedProvider(provider);
-    expect(guardedProvider).toBeDefined();
-
-    await expect(guardedProvider!.request({ method: 'eth_sign' })).rejects.toThrow(
+  it('enforces signing guards before authentication is completed', () => {
+    expect(() => enforceWalletRequestGuards('eth_sign', { isConnected: true, needsAuth: false })).toThrow(
       'Direct eth_sign requests are blocked for security reasons.',
     );
+
+    expect(() => enforceWalletRequestGuards('eth_signTypedData_v4', { isConnected: true, needsAuth: true })).toThrow(
+      'Typed data signatures are only allowed after wallet authentication.',
+    );
+
+    expect(() => enforceWalletRequestGuards('eth_signTypedData_v4', { isConnected: true, needsAuth: false })).not.toThrow();
   });
 
   it('detects SafePal provider and persists wallet type', async () => {

@@ -68,19 +68,33 @@ const normalizeWalletType = (value: string | null | undefined): WalletType | nul
   return null;
 };
 
-const guardedProviderCache = new WeakMap<Eip1193Provider, Eip1193Provider>();
-const originalProviderLookup = new WeakMap<Eip1193Provider, Eip1193Provider>();
+const DISALLOWED_METHOD = 'eth_sign';
+const TYPED_DATA_METHODS = new Set([
+  'eth_signtypeddata',
+  'eth_signtypeddata_v1',
+  'eth_signtypeddata_v3',
+  'eth_signtypeddata_v4',
+]);
 
-export const getGuardedProvider = (provider: Eip1193Provider): Eip1193Provider | undefined => {
-  if (originalProviderLookup.has(provider)) {
-    return provider;
+type WalletAuthSnapshot = Pick<WalletState, 'isConnected' | 'needsAuth'>;
+
+export const enforceWalletRequestGuards = (method: string, state: WalletAuthSnapshot | null) => {
+  const normalized = typeof method === 'string' ? method.toLowerCase() : '';
+
+  if (normalized === DISALLOWED_METHOD) {
+    throw new Error('Direct eth_sign requests are blocked for security reasons.');
   }
-  return guardedProviderCache.get(provider);
+
+  if (TYPED_DATA_METHODS.has(normalized)) {
+    if (!state?.isConnected || state.needsAuth) {
+      throw new Error('Typed data signatures are only allowed after wallet authentication.');
+    }
+  }
 };
 
 export const useWallet = () => {
   const { registerPendingReferral } = useReferral();
-  const providerRef = useRef<any>(null);
+  const providerRef = useRef<Eip1193Provider | null>(null);
   const walletStateRef = useRef<WalletState | null>(null);
   const isConnectingRef = useRef(false);
   const isAuthenticatingRef = useRef(false);
@@ -102,6 +116,8 @@ export const useWallet = () => {
   });
 
   walletStateRef.current = walletState;
+
+  const hasRequestedAccountsRef = useRef(false);
 
   const resolveWindowProvider = useCallback((): Eip1193Provider | null => {
     if (typeof window === 'undefined') {
@@ -143,91 +159,24 @@ export const useWallet = () => {
     return deriveWalletType();
   }, [deriveWalletType]);
 
-  const guardProvider = useCallback((provider: any) => {
-    if (walletStateRef.current?.isFrameBlocked) {
-      return null;
+  const getProvider = useCallback((): Eip1193Provider | null => {
+    const nextProvider = providerRef.current ?? resolveWindowProvider();
+
+    if (nextProvider && providerRef.current !== nextProvider) {
+      providerRef.current = nextProvider;
     }
 
-    if (!provider) {
-      return provider;
-    }
+    return providerRef.current;
+  }, [resolveWindowProvider]);
 
-    const alreadyOriginal = originalProviderLookup.get(provider);
-    if (alreadyOriginal) {
-      return provider;
-    }
-
-    const cachedGuard = guardedProviderCache.get(provider);
-    if (cachedGuard) {
-      return cachedGuard;
-    }
-
-    const originalRequest = typeof provider.request === 'function' ? provider.request.bind(provider) : null;
-    if (!originalRequest) {
-      return provider;
-    }
-
-    const disallowedMethod = 'eth_sign';
-    const typedDataMethods = new Set([
-      'eth_signtypeddata',
-      'eth_signtypeddata_v1',
-      'eth_signtypeddata_v3',
-      'eth_signtypeddata_v4',
-    ]);
-
-    const guardedRequest = async (...args: any[]) => {
-      const request = args[0];
-      const method = typeof request === 'string' ? request : request?.method;
-      const normalizedMethod = typeof method === 'string' ? method.toLowerCase() : '';
-
-      if (normalizedMethod === disallowedMethod) {
-        throw new Error('Direct eth_sign requests are blocked for security reasons.');
-      }
-
-      if (typedDataMethods.has(normalizedMethod)) {
-        const state = walletStateRef.current;
-        if (!state?.isConnected || state.needsAuth) {
-          throw new Error('Typed data signatures are only allowed after wallet authentication.');
-        }
-      }
-
-      return originalRequest(...args);
-    };
-
-    const guarded = new Proxy(provider, {
-      get(target, prop, receiver) {
-        if (prop === 'request') {
-          return guardedRequest;
-        }
-
-        if (prop === '__goalplayGuarded') {
-          return true;
-        }
-
-        const value = Reflect.get(target, prop, receiver);
-        if (typeof value === 'function') {
-          return value.bind(target);
-        }
-        return value;
-      },
-    });
-
-    guardedProviderCache.set(provider, guarded as Eip1193Provider);
-    originalProviderLookup.set(guarded as Eip1193Provider, provider as Eip1193Provider);
-
-    return guarded as Eip1193Provider;
-  }, []);
-
-  const getProvider = useCallback(() => {
-    const rawProvider = providerRef.current ?? resolveWindowProvider();
-    if (!rawProvider) {
-      return null;
-    }
-
-    const guarded = guardProvider(rawProvider);
-    providerRef.current = guarded;
-    return guarded;
-  }, [guardProvider, resolveWindowProvider]);
+  const requestWithGuards = useCallback(
+    async (provider: Eip1193Provider, args: { method: string; params?: any[] } | string) => {
+      const requestObject = typeof args === 'string' ? { method: args } : args;
+      enforceWalletRequestGuards(requestObject.method, walletStateRef.current);
+      return provider.request(requestObject);
+    },
+    [],
+  );
 
   const setError = (message: string | null) => {
     setWalletState((prev) => ({ ...prev, error: message }));
@@ -245,7 +194,7 @@ export const useWallet = () => {
 
       let signature: string;
       try {
-        signature = await provider.request({
+        signature = await requestWithGuards(provider, {
           method: 'personal_sign',
           params: [message, address],
         });
@@ -266,7 +215,7 @@ export const useWallet = () => {
       await registerPendingReferral();
       return verification;
     },
-    [getProvider, registerPendingReferral],
+    [getProvider, registerPendingReferral, requestWithGuards],
   );
 
   const resetToDisconnected = useCallback((errorMessage?: string) => {
@@ -274,6 +223,7 @@ export const useWallet = () => {
     ApiService.markSessionActive(false);
     isConnectingRef.current = false;
     isAuthenticatingRef.current = false;
+    hasRequestedAccountsRef.current = false;
     setWalletState((prev) => ({
       isConnected: false,
       address: null,
@@ -317,8 +267,8 @@ export const useWallet = () => {
     setWalletState((prev) => ({ ...prev, isConnecting: true, error: null, walletType: normalizedType }));
 
     try {
-      const accounts: string[] = await provider.request({ method: 'eth_requestAccounts' });
-      const chainIdHex: string = await provider.request({ method: 'eth_chainId' });
+      const accounts: string[] = await requestWithGuards(provider, { method: 'eth_requestAccounts' });
+      const chainIdHex: string = await requestWithGuards(provider, { method: 'eth_chainId' });
       const chainIdNumber = Number.parseInt(chainIdHex, 16);
 
       persistWallet(chainIdNumber, accounts[0], normalizedType ?? undefined);
@@ -335,6 +285,7 @@ export const useWallet = () => {
         isFrameBlocked: prev.isFrameBlocked,
         walletType: normalizedType,
       }));
+      hasRequestedAccountsRef.current = true;
       const label = normalizedType ? normalizedType.toUpperCase() : 'WALLET';
       console.log(`✅ ${label} connected: ${formatCaip10(chainIdNumber, accounts[0])}`);
     } catch (error: any) {
@@ -348,7 +299,7 @@ export const useWallet = () => {
     } finally {
       isConnectingRef.current = false;
     }
-  }, [deriveWalletType, detectWalletType, getProvider, walletState.isConnecting, walletState.isFrameBlocked]);
+  }, [deriveWalletType, detectWalletType, getProvider, requestWithGuards, walletState.isConnecting, walletState.isFrameBlocked]);
 
   const signInWallet = useCallback(async () => {
     if (walletState.isFrameBlocked) {
@@ -404,13 +355,13 @@ export const useWallet = () => {
     }
 
     try {
-      await provider.request({
+      await requestWithGuards(provider, {
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: `0x${targetChainId.toString(16)}` }],
       });
     } catch (error: any) {
       if (error?.code === 4902) {
-        await provider.request({
+        await requestWithGuards(provider, {
           method: 'wallet_addEthereumChain',
           params: [BSC_NETWORK],
         });
@@ -418,7 +369,7 @@ export const useWallet = () => {
         throw error;
       }
     }
-  }, [getProvider]);
+  }, [getProvider, requestWithGuards]);
 
   useEffect(() => {
     const provider = getProvider();
@@ -427,6 +378,10 @@ export const useWallet = () => {
     }
 
     const handleAccountsChanged = async (accounts: string[]) => {
+      if (!hasRequestedAccountsRef.current) {
+        return;
+      }
+
       if (!accounts.length) {
         disconnectWallet();
         return;
@@ -434,7 +389,7 @@ export const useWallet = () => {
 
       let chainIdNumber = walletState.chainId ?? 56;
       try {
-        const chainIdHex: string = await provider.request?.({ method: 'eth_chainId' });
+        const chainIdHex: string = await requestWithGuards(provider, { method: 'eth_chainId' });
         if (chainIdHex) {
           chainIdNumber = Number.parseInt(chainIdHex, 16);
         }
@@ -460,6 +415,10 @@ export const useWallet = () => {
     };
 
     const handleChainChanged = (chainIdHex: string) => {
+      if (!hasRequestedAccountsRef.current) {
+        return;
+      }
+
       const chainIdNumber = Number.parseInt(chainIdHex, 16);
       setWalletState((prev) => ({
         ...prev,
@@ -477,14 +436,13 @@ export const useWallet = () => {
       provider.removeListener?.('accountsChanged', handleAccountsChanged);
       provider.removeListener?.('chainChanged', handleChainChanged);
     };
-  }, [deriveWalletType, disconnectWallet, getProvider, walletState.chainId, walletState.isConnected]);
+  }, [deriveWalletType, disconnectWallet, getProvider, requestWithGuards, walletState.chainId, walletState.isConnected]);
 
   useEffect(() => {
     const handleProviderAnnouncement = (event: any) => {
       if (event?.detail?.provider) {
-        const guarded = guardProvider(event.detail.provider);
-        providerRef.current = guarded;
-        const type = deriveWalletType(guarded);
+        providerRef.current = event.detail.provider;
+        const type = deriveWalletType(event.detail.provider);
         if (!walletStateRef.current?.walletType && type !== 'unknown') {
           setWalletState((prev) => ({ ...prev, walletType: type }));
         }
@@ -496,7 +454,7 @@ export const useWallet = () => {
 
     const initialProvider = resolveWindowProvider();
     if (initialProvider && !providerRef.current) {
-      providerRef.current = guardProvider(initialProvider);
+      providerRef.current = initialProvider;
       const type = deriveWalletType(initialProvider);
       if (!walletStateRef.current?.walletType && type !== 'unknown') {
         setWalletState((prev) => ({ ...prev, walletType: type }));
@@ -506,7 +464,7 @@ export const useWallet = () => {
     return () => {
       window.removeEventListener('eip6963:announceProvider', handleProviderAnnouncement as EventListener);
     };
-  }, [deriveWalletType, guardProvider, resolveWindowProvider]);
+  }, [deriveWalletType, resolveWindowProvider]);
 
   useEffect(() => {
     let framed = false;
