@@ -9,10 +9,10 @@
 - [ ] Variables de entorno documentadas
 
 ### **🗄️ Base de Datos:**
-- [ ] Supabase proyecto creado
+- [ ] Clúster PostgreSQL provisionado
 - [ ] Migraciones ejecutadas (`pnpm run migrate:json-to-db`)
-- [ ] Credenciales de Supabase obtenidas
-- [ ] RLS políticas configuradas
+- [ ] Credenciales de PostgreSQL configuradas
+- [ ] Políticas RLS configuradas
 
 ### **🔒 Seguridad:**
 - [ ] JWT_SECRET generado (usar `openssl rand -base64 32`)
@@ -80,7 +80,7 @@
 ```bash
 # Verificar variables de entorno:
 # 1. JWT_SECRET configurado
-# 2. SUPABASE_URL y SUPABASE_ANON_KEY
+# 2. Configuración de PostgreSQL completa (DB_HOST, DB_USERNAME, etc.)
 # 3. USE_DATABASE=true
 
 # Solución:
@@ -102,13 +102,13 @@
 
 ### **❌ "Database Connection Failed":**
 ```bash
-# Verificar Supabase:
-# 1. Proyecto activo
+# Verificar PostgreSQL:
+# 1. Instancia activa
 # 2. Credenciales correctas
 # 3. Políticas RLS configuradas
 
 # Solución:
-# - Verificar credenciales en Supabase dashboard
+# - Verificar credenciales en el panel de PostgreSQL
 # - Re-ejecutar migraciones si es necesario
 # - Verificar que las tablas existen
 ```
@@ -147,11 +147,9 @@ Digital Ocean App Platform:
 ├── PostgreSQL (opcional): $15/mes
 └── Total: $8-23/mes
 
-Supabase (Recomendado):
-├── Database: Gratis hasta 500MB
-├── Auth: Gratis hasta 50K usuarios
-├── Storage: Gratis hasta 1GB
-└── Total con DO: $8/mes
+PostgreSQL Gestionado:
+├── Digital Ocean Managed PG: desde $15/mes
+└── Alternativas (Railway/Fly.io): planes gratuitos limitados
 ```
 
 ### **📈 Escalamiento:**
@@ -159,13 +157,13 @@ Supabase (Recomendado):
 Para 1K usuarios activos:
 ├── Backend (Professional): $12/mes
 ├── Frontend (Professional): $12/mes
-├── Database: Supabase Pro $25/mes
+├── Database: Managed PG (plan intermedio) ~$25/mes
 └── Total: $49/mes
 
 Para 10K usuarios activos:
 ├── Backend (Basic + replicas): $25/mes
 ├── Frontend (Professional): $12/mes
-├── Database: Supabase Pro $25/mes
+├── Database: Managed PG (plan intermedio) ~$25/mes
 └── Total: $62/mes
 ```
 

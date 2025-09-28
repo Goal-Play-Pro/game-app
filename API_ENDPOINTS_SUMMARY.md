@@ -334,7 +334,7 @@ Create Code → Share Link → Friend Registers → Friend Buys → Auto Commiss
 ### **⚡ Performance:**
 - **Sub-100ms** para consultas simples
 - **Sub-500ms** para consultas complejas
-- **Concurrent users** ilimitados con Supabase
+- **Concurrent users** soportados mediante pooling de PostgreSQL
 - **Real-time updates** con WebSockets
 
 ### **🔒 Seguridad:**

@@ -1429,7 +1429,7 @@
 ✅ **Gameplay determinístico** con seeds verificables  
 ✅ **Analytics avanzados** para decisiones de negocio  
 ✅ **Compliance total** con auditoría completa  
-✅ **Escalabilidad ilimitada** con Supabase  
+✅ **Escalabilidad ilimitada** con PostgreSQL administrado  
 
 ### **🚀 Valor de Negocio:**
 - **Revenue:** $892,456.78 total procesado

@@ -7,7 +7,7 @@
 - ✅ **Lógica de negocio completa** - Órdenes → Pago → Gacha → Inventario → Comisiones
 - ✅ **Sistema de referidos funcional** - 5% automático con ledger
 - ✅ **Base de datos robusta** - 20 tablas con relaciones correctas
-- ✅ **Sin dependencias problemáticas** - Sin Supabase, sin archivos JSON
+- ✅ **Sin dependencias problemáticas** - Solo PostgreSQL y TypeORM (sin servicios externos opcionales)
 
 ---
 

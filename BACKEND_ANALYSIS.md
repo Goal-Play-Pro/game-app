@@ -413,12 +413,12 @@ Usuario → Crea Código → Comparte Link → Referido se Registra → Compra �
 
 ### **⚡ Performance:**
 - **Indexes estratégicos** en todas las consultas frecuentes
-- **Connection pooling** automático con Supabase
+- **Connection pooling** automático con PostgreSQL gestionado
 - **Query optimization** con foreign keys
 - **Caching** en memoria para datos frecuentes
 
 ### **📊 Escalabilidad:**
-- **Horizontal scaling** con Supabase
+- **Horizontal scaling** preparado para instancias administradas
 - **Microservices ready** con módulos independientes
 - **API versioning** preparado
 - **Load balancing** compatible
@@ -551,7 +551,7 @@ Usuario → Crea Código → Comparte Link → Referido se Registra → Compra �
 - ✅ **Sistema de referidos** con comisiones automáticas
 - ✅ **Contabilidad completa** con doble entrada
 - ✅ **Analytics avanzados** para negocio y usuarios
-- ✅ **Escalabilidad empresarial** con Supabase
+- ✅ **Escalabilidad empresarial** lista para clústeres PostgreSQL
 - ✅ **Seguridad de nivel bancario** con RLS y auditoría
 
 ### **📊 Datos que se Almacenan:**

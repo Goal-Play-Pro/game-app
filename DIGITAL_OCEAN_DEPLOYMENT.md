@@ -42,17 +42,13 @@ goal-play/
 
 ## 🗄️ **PASO 2: CONFIGURAR BASE DE DATOS**
 
-### **Opción A: Usar Supabase (Recomendado)**
-1. **Conectar a Supabase** (botón en esquina superior derecha)
-2. **Ejecutar migraciones:**
+### **Base de datos PostgreSQL administrada**
+1. Provisiona un clúster PostgreSQL (Digital Ocean Managed PG o proveedor equivalente).
+2. Ejecuta las migraciones:
    ```bash
    pnpm run migrate:json-to-db
    ```
-3. **Obtener credenciales** de Supabase Dashboard
-
-### **Opción B: Usar PostgreSQL de Digital Ocean**
-- Se configura automáticamente en `app.yaml`
-- Más caro pero totalmente integrado
+3. Copia las credenciales (host, puerto, usuario, contraseña, nombre de base y SSL) al panel de variables.
 
 ---
 
@@ -75,9 +71,6 @@ goal-play/
 ```bash
 # JWT y Seguridad
 JWT_SECRET=tu-secreto-super-seguro-cambiar-en-produccion-123
-
-# Supabase (si usas Supabase)
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIs...
 
 # Wallets de Recepción (CRÍTICO - usar wallets reales)
 ETH_RECEIVING_WALLET=0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000
@@ -170,8 +163,8 @@ Digital Ocean verificará automáticamente:
   - Múltiples regiones
 
 #### **Base de Datos:**
-- **Supabase:** Gratis hasta 500MB
 - **DO PostgreSQL:** $15/mes (1GB)
+- **Alternativas administradas:** Railway, Render, Fly.io (planes gratuitos limitados)
 
 ---
 
@@ -189,8 +182,6 @@ ETH_RECEIVING_WALLET=0xTU_WALLET_REAL_ETHEREUM
 BSC_RECEIVING_WALLET=0xTU_WALLET_REAL_BSC
 POLYGON_RECEIVING_WALLET=0xTU_WALLET_REAL_POLYGON
 
-# Supabase (obtener de tu proyecto)
-SUPABASE_ANON_KEY=tu-clave-anonima-real
 ```
 
 ### **7.2 Configuración CORS:**
@@ -259,7 +250,7 @@ curl https://tu-frontend.ondigitalocean.app
 ```bash
 # Verificar variables de entorno
 # Verificar que USE_DATABASE=true
-# Verificar conexión a Supabase
+# Verificar conexión al clúster PostgreSQL
 ```
 
 ### **❌ "CORS Error":**
@@ -270,7 +261,7 @@ curl https://tu-frontend.ondigitalocean.app
 
 ### **❌ "Database Connection Failed":**
 ```bash
-# Verificar credenciales de Supabase
+# Verificar credenciales de PostgreSQL
 # Verificar que las migraciones se ejecutaron
 ```
 
@@ -311,7 +302,7 @@ curl https://tu-frontend.ondigitalocean.app
 ✅ **Frontend:** https://goalplay.app (ejemplo)
 ✅ **Backend:** https://api.goalplay.app
 ✅ **API Docs:** https://api.goalplay.app/api/docs
-✅ **Base de datos:** PostgreSQL o Supabase
+✅ **Base de datos:** PostgreSQL administrado
 ✅ **SSL:** Certificados automáticos
 ✅ **CDN:** Distribución global
 ✅ **Monitoring:** Métricas en tiempo real
@@ -340,7 +331,7 @@ curl https://tu-frontend.ondigitalocean.app
 ### **🎯 Para Optimizar Costos:**
 - Empezar con configuración básica ($8/mes)
 - Escalar solo cuando sea necesario
-- Usar Supabase para base de datos (gratis)
+- Usar base de datos administrada de bajo costo
 - Monitorear uso mensual
 
 ### **🚀 Para Maximizar Performance:**

@@ -33,10 +33,6 @@ export const BACKEND_CONFIG = {
     ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : [])
   ],
   
-  // Configuración de Supabase
-  SUPABASE_URL: process.env.VITE_SUPABASE_URL,
-  SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY,
-  
   // Configuración de rate limiting
   THROTTLE_TTL: parseInt(process.env.THROTTLE_TTL || '60000'),
   THROTTLE_LIMIT: parseInt(process.env.THROTTLE_LIMIT || '100'),
