@@ -19,6 +19,7 @@ jest.mock('../../services/api', () => {
   };
 });
 
+import { clearPreferredProvider } from '../../utils/providerRegistry';
 import { enforceWalletRequestGuards, useWallet } from '../useWallet';
 
 type Eip1193Provider = {
@@ -63,6 +64,7 @@ describe('useWallet', () => {
 
   beforeEach(() => {
     originalWindow = global.window;
+    clearPreferredProvider();
     (global as any).localStorage = new LocalStorageMock();
     if (typeof (global as any).CustomEvent === 'undefined') {
       (global as any).CustomEvent = class CustomEvent<T> extends Event {
@@ -79,6 +81,7 @@ describe('useWallet', () => {
     jest.resetAllMocks();
     global.window = originalWindow;
     (global as any).localStorage = new LocalStorageMock();
+    clearPreferredProvider();
     if (queryClient) {
       queryClient.clear();
     }
@@ -160,6 +163,32 @@ describe('useWallet', () => {
     expect(invokedMethods).not.toContain('wallet_addEthereumChain');
     expect(result.current.walletType).toBe('metamask');
     expect(localStorage.getItem('walletType')).toBe('metamask');
+  });
+
+  it('flags unsupported chain when connecting on a non-BSC network', async () => {
+    setupProvider(
+      { isMetaMask: true },
+      {},
+      (method) => {
+        if (method === 'eth_requestAccounts') {
+          return Promise.resolve([METAMASK_ADDRESS]);
+        }
+        if (method === 'eth_chainId') {
+          return Promise.resolve('0x1');
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    queryClient = new QueryClient();
+    const { result } = renderHook(() => useWallet(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.connectWallet();
+    });
+
+    expect(result.current.errorCode).toBe(4901);
+    expect(result.current.error).toContain('Unsupported chain');
   });
 
   it('enforces signing guards before authentication is completed', () => {
@@ -269,5 +298,50 @@ describe('useWallet', () => {
 
     expect(safepalResult.current.walletType).toBe('safepal');
     expect(localStorage.getItem('walletType')).toBe('safepal');
+  });
+
+  it('resets state when provider disconnects', async () => {
+    const disconnectHandlers: Array<(payload: unknown) => void> = [];
+
+    const provider = setupProvider(
+      { isMetaMask: true },
+      {},
+      (method) => {
+        if (method === 'eth_requestAccounts') {
+          return Promise.resolve([METAMASK_ADDRESS]);
+        }
+        if (method === 'eth_chainId') {
+          return Promise.resolve('0x38');
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    provider.on = jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+      if (event === 'disconnect') {
+        disconnectHandlers.push(handler);
+      }
+      return provider;
+    });
+
+    provider.removeListener = jest.fn();
+
+    queryClient = new QueryClient();
+    const { result } = renderHook(() => useWallet(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.connectWallet();
+    });
+
+    expect(result.current.isConnected).toBe(true);
+
+    const disconnectEvent = { code: 4900, message: 'MetaMask disconnected' };
+    await act(async () => {
+      disconnectHandlers.forEach((handler) => handler(disconnectEvent));
+    });
+
+    expect(result.current.isConnected).toBe(false);
+    expect(result.current.errorCode).toBe(4900);
+    expect(result.current.error).toContain('disconnected');
   });
 });

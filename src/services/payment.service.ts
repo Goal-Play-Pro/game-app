@@ -1,20 +1,34 @@
 import { ethers } from 'ethers';
 import { PAYMENT_CONFIG } from '../config/payment.config';
+import type { WalletType, Eip1193Provider, WalletWindow, Eip6963ProviderInfo, Eip1193RequestArguments } from '../types/wallet';
+import { getPreferredProvider, getPreferredProviderInfo } from '../utils/providerRegistry';
+import {
+  createWalletError,
+  normalizeWalletError,
+  resolveMethodFallback,
+  WalletRpcError,
+} from '../utils/walletErrors';
 
-type WalletType = 'metamask' | 'safepal' | 'unknown';
+const normalizeInfoString = (info?: Eip6963ProviderInfo) => {
+  if (!info) {
+    return '';
+  }
+  return `${info.rdns ?? ''} ${info.name ?? ''} ${info.description ?? ''}`.toLowerCase();
+};
 
-interface Eip1193Provider {
-  request: (args: { method: string; params?: any[] }) => Promise<any>;
-  isMetaMask?: boolean;
-  isSafePal?: boolean;
-  on?: (event: string, handler: (...args: any[]) => void) => void;
-  removeListener?: (event: string, handler: (...args: any[]) => void) => void;
-}
+const isSafePalProvider = (provider?: Eip1193Provider | null, info?: Eip6963ProviderInfo) => {
+  if (provider?.isSafePal) {
+    return true;
+  }
+  return normalizeInfoString(info).includes('safepal');
+};
 
-interface WalletWindow extends Window {
-  ethereum?: Eip1193Provider;
-  safePal?: Eip1193Provider;
-}
+const isMetaMaskProvider = (provider?: Eip1193Provider | null, info?: Eip6963ProviderInfo) => {
+  if (provider?.isMetaMask) {
+    return true;
+  }
+  return normalizeInfoString(info).includes('metamask');
+};
 
 /**
  * Payment Service - Manejo de pagos reales con wallets compatibles
@@ -22,6 +36,11 @@ interface WalletWindow extends Window {
  */
 export class PaymentService {
   private static resolveWindowProvider(): Eip1193Provider | null {
+    const preferred = getPreferredProvider();
+    if (preferred) {
+      return preferred;
+    }
+
     if (typeof window === 'undefined') {
       return null;
     }
@@ -35,15 +54,40 @@ export class PaymentService {
     return null;
   }
 
+  private static async requestProvider<T = unknown>(
+    provider: Eip1193Provider,
+    args: Eip1193RequestArguments,
+  ): Promise<T> {
+    const fallback = resolveMethodFallback(args.method);
+
+    try {
+      return (await provider.request(args)) as T;
+    } catch (error: unknown) {
+      throw normalizeWalletError(error, fallback.code, fallback.message);
+    }
+  }
+
   private static detectWalletType(provider?: Eip1193Provider | null): WalletType {
     const candidate = provider ?? this.resolveWindowProvider();
     const win = typeof window !== 'undefined' ? (window as unknown as WalletWindow) : undefined;
 
-    if (candidate?.isSafePal || win?.safePal?.isSafePal) {
+    const info = getPreferredProviderInfo();
+    const preferred = getPreferredProvider();
+
+    if (info && (!candidate || !preferred || candidate === preferred)) {
+      if (isSafePalProvider(candidate, info)) {
+        return 'safepal';
+      }
+      if (isMetaMaskProvider(candidate, info)) {
+        return 'metamask';
+      }
+    }
+
+    if (isSafePalProvider(candidate, info) || win?.safePal?.isSafePal) {
       return 'safepal';
     }
 
-    if (candidate?.isMetaMask || win?.ethereum?.isMetaMask) {
+    if (isMetaMaskProvider(candidate, info) || win?.ethereum?.isMetaMask) {
       return 'metamask';
     }
 
@@ -93,15 +137,19 @@ export class PaymentService {
     success: boolean;
     chainId?: number;
     error?: string;
+    errorCode?: number;
   }> {
     const provider = this.getWalletProvider();
 
     if (!provider) {
-      return { success: false, error: 'Wallet provider not detected' };
+      return { success: false, error: 'Wallet provider not detected', errorCode: 4900 };
     }
 
     try {
-      const currentChainIdHex = await provider.request({ method: 'eth_chainId' });
+      const currentChainIdHex = await this.requestProvider<string>(provider, {
+        method: 'eth_chainId',
+        params: [],
+      });
       const currentChainId = parseInt(currentChainIdHex, 16);
 
       if (currentChainId === this.BSC_CHAIN_ID) {
@@ -110,11 +158,17 @@ export class PaymentService {
 
       await this.switchToBSC(provider);
       return { success: true, chainId: this.BSC_CHAIN_ID };
-    } catch (error: any) {
-      console.error('Error ensuring BSC network:', error);
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(
+        error,
+        4901,
+        'Failed to switch to BNB Smart Chain.',
+      );
+      console.error('Error ensuring BSC network:', normalizedError);
       return {
         success: false,
-        error: error?.message || 'Failed to switch to BSC network',
+        error: normalizedError.message || 'Failed to switch to BSC network',
+        errorCode: normalizedError.code,
       };
     }
   }
@@ -129,30 +183,53 @@ export class PaymentService {
     }
 
     try {
-      await provider.request({
+      await this.requestProvider(provider, {
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x38' }], // BSC Mainnet
+        params: [{ chainId: '0x38' }],
       });
-    } catch (switchError: any) {
-      // Si BSC no está añadido, añadirlo
-      if (switchError.code === 4902) {
-        await provider.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: '0x38',
-            chainName: 'BNB Smart Chain',
-            nativeCurrency: {
-              name: 'BNB',
-              symbol: 'BNB',
-              decimals: 18,
-            },
-            rpcUrls: ['https://bsc-dataseed1.binance.org/'],
-            blockExplorerUrls: ['https://bscscan.com/'],
-          }],
-        });
-      } else {
-        throw switchError;
+    } catch (switchError: unknown) {
+      const normalizedSwitchError = normalizeWalletError(
+        switchError,
+        4901,
+        'Unable to switch to BNB Smart Chain.',
+      );
+
+      if (normalizedSwitchError.code === 4902) {
+        try {
+          await this.requestProvider(provider, {
+            method: 'wallet_addEthereumChain',
+            params: [
+              {
+                chainId: '0x38',
+                chainName: 'BNB Smart Chain',
+                nativeCurrency: {
+                  name: 'BNB',
+                  symbol: 'BNB',
+                  decimals: 18,
+                },
+                rpcUrls: ['https://bsc-dataseed1.binance.org/'],
+                blockExplorerUrls: ['https://bscscan.com/'],
+              },
+            ],
+          });
+
+          await this.requestProvider(provider, {
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x38' }],
+          });
+          return;
+        } catch (addError: unknown) {
+          const normalizedAddError = normalizeWalletError(
+            addError,
+            4901,
+            'Failed to add BNB Smart Chain to wallet.',
+          );
+
+          throw normalizedAddError;
+        }
       }
+
+      throw normalizedSwitchError;
     }
   }
 
@@ -185,12 +262,17 @@ export class PaymentService {
         balance: balance.toString(),
         formatted: parseFloat(formatted).toFixed(2),
       };
-    } catch (error: any) {
-      console.error('Error getting USDT balance:', error);
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(
+        error,
+        -1,
+        'Failed to retrieve USDT balance.',
+      );
+      console.error('Error getting USDT balance:', normalizedError);
       return {
         balance: '0',
         formatted: '0.00',
-        error: error.message,
+        error: normalizedError.message,
       };
     }
   }
@@ -207,11 +289,12 @@ export class PaymentService {
     paymentHash?: string;
     approvalHash?: string;
     error?: string;
+    errorCode?: number;
   }> {
     const provider = this.getWalletProvider();
 
     if (!provider) {
-      return { success: false, error: 'Wallet provider not detected' };
+      return { success: false, error: 'Wallet provider not detected', errorCode: 4900 };
     }
 
     if (!this.PAYMENT_GATEWAY_CONTRACT) {
@@ -219,7 +302,10 @@ export class PaymentService {
     }
 
     try {
-      const accounts: string[] = await provider.request({ method: 'eth_accounts' });
+      const accounts = await this.requestProvider<string[]>(provider, {
+        method: 'eth_accounts',
+        params: [],
+      });
       const activeAccount = accounts?.[0];
 
       if (!activeAccount) {
@@ -228,7 +314,11 @@ export class PaymentService {
 
       const ensureNetwork = await this.ensureBscNetwork();
       if (!ensureNetwork.success) {
-        return { success: false, error: ensureNetwork.error || 'Failed to switch to BSC' };
+        return {
+          success: false,
+          error: ensureNetwork.error || 'Failed to switch to BSC',
+          errorCode: ensureNetwork.errorCode,
+        };
       }
 
       const browserProvider = new ethers.BrowserProvider(provider);
@@ -272,12 +362,17 @@ export class PaymentService {
         paymentHash: paymentTx.hash,
         approvalHash,
       };
-    } catch (error: any) {
-      console.error('❌ Error executing gateway payment:', error);
-      if (error.code === 'ACTION_REJECTED') {
-        return { success: false, error: 'Payment cancelled by user' };
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(error, 4001, 'Payment failed.');
+      console.error('❌ Error executing gateway payment:', normalizedError);
+      if (normalizedError.code === 4001) {
+        return { success: false, error: 'Payment cancelled by user', errorCode: normalizedError.code };
       }
-      return { success: false, error: error?.message || 'Payment failed' };
+      return {
+        success: false,
+        error: normalizedError.message || 'Payment failed',
+        errorCode: normalizedError.code,
+      };
     }
   }
 
@@ -330,14 +425,19 @@ export class PaymentService {
         gasCostBNB: parseFloat(gasCostBNB).toFixed(6),
         gasCostUSD,
       };
-    } catch (error: any) {
-      console.error('Error estimating gas:', error);
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(
+        error,
+        -1,
+        'Failed to estimate gas costs.',
+      );
+      console.error('Error estimating gas:', normalizedError);
       return {
         gasLimit: '65000',
         gasPrice: '5000000000',
         gasCostBNB: '0.001',
         gasCostUSD: '0.30',
-        error: error.message,
+        error: normalizedError.message,
       };
     }
   }
@@ -383,12 +483,17 @@ export class PaymentService {
         blockNumber: receipt.blockNumber,
         gasUsed: receipt.gasUsed.toString(),
       };
-    } catch (error: any) {
-      console.error('Error verifying transaction:', error);
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(
+        error,
+        -1,
+        'Failed to verify transaction.',
+      );
+      console.error('Error verifying transaction:', normalizedError);
       return {
         success: false,
         confirmations: 0,
-        error: error.message,
+        error: normalizedError.message,
       };
     }
   }
@@ -427,8 +532,13 @@ export class PaymentService {
         gasPrice: feeData.gasPrice?.toString() || '0',
         isConnected: Number(network.chainId) === this.BSC_CHAIN_ID,
       };
-    } catch (error) {
-      console.error('Error getting BSC network info:', error);
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(
+        error,
+        -1,
+        'Failed to retrieve BSC network info.',
+      );
+      console.error('Error getting BSC network info:', normalizedError);
       return {
         chainId: 0,
         blockNumber: 0,

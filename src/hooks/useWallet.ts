@@ -4,21 +4,26 @@ import { useReferral } from './useReferral';
 import ApiService from '../services/api';
 import { persistWallet, clearPersistedWallet, getStoredWallet } from '../utils/walletStorage';
 import { formatCaip10 } from '../utils/caip10';
-
-type WalletType = 'metamask' | 'safepal' | 'unknown';
-
-interface Eip1193Provider {
-  request: (args: { method: string; params?: any[] }) => Promise<any>;
-  isMetaMask?: boolean;
-  isSafePal?: boolean;
-  on?: (event: string, handler: (...args: any[]) => void) => void;
-  removeListener?: (event: string, handler: (...args: any[]) => void) => void;
-}
-
-interface WalletWindow extends Window {
-  ethereum?: Eip1193Provider;
-  safePal?: Eip1193Provider;
-}
+import type {
+  Eip1193Provider,
+  WalletType,
+  Eip6963AnnounceProviderEvent,
+  WalletWindow,
+  Eip6963ProviderInfo,
+  Eip1193DisconnectEvent,
+  Eip1193RequestArguments,
+} from '../types/wallet';
+import {
+  getPreferredProvider,
+  getPreferredProviderInfo,
+  setPreferredProvider,
+  clearPreferredProvider,
+} from '../utils/providerRegistry';
+import {
+  createWalletError,
+  normalizeWalletError,
+  resolveMethodFallback,
+} from '../utils/walletErrors';
 
 interface WalletState {
   isConnected: boolean;
@@ -30,6 +35,7 @@ interface WalletState {
   isAuthenticating: boolean;
   needsAuth: boolean;
   error: string | null;
+  errorCode: number | null;
   isFrameBlocked: boolean;
   walletType: WalletType | null;
 }
@@ -78,6 +84,29 @@ const TYPED_DATA_METHODS = new Set([
 
 type WalletAuthSnapshot = Pick<WalletState, 'isConnected' | 'needsAuth'>;
 
+const normalizeInfoString = (info?: Eip6963ProviderInfo) => {
+  if (!info) {
+    return '';
+  }
+  return `${info.rdns ?? ''} ${info.name ?? ''} ${info.description ?? ''}`.toLowerCase();
+};
+
+const isSafePalProvider = (provider?: Eip1193Provider | null, info?: Eip6963ProviderInfo) => {
+  if (provider?.isSafePal) {
+    return true;
+  }
+  const normalized = normalizeInfoString(info);
+  return normalized.includes('safepal');
+};
+
+const isMetaMaskProvider = (provider?: Eip1193Provider | null, info?: Eip6963ProviderInfo) => {
+  if (provider?.isMetaMask) {
+    return true;
+  }
+  const normalized = normalizeInfoString(info);
+  return normalized.includes('metamask');
+};
+
 export const enforceWalletRequestGuards = (method: string, state: WalletAuthSnapshot | null) => {
   const normalized = typeof method === 'string' ? method.toLowerCase() : '';
 
@@ -110,6 +139,7 @@ export const useWallet = () => {
       isAuthenticating: false,
       needsAuth: initialStoredWallet.needsAuth,
       error: null,
+      errorCode: null,
       isFrameBlocked: false,
       walletType: normalizeWalletType(initialStoredWallet.walletType),
     };
@@ -119,7 +149,7 @@ export const useWallet = () => {
 
   const hasRequestedAccountsRef = useRef(initialStoredWallet.isConnected);
 
-  const resolveWindowProvider = useCallback((): Eip1193Provider | null => {
+  const resolveWindowProviderFromWindow = useCallback((): Eip1193Provider | null => {
     if (typeof window === 'undefined') {
       return null;
     }
@@ -133,16 +163,36 @@ export const useWallet = () => {
     return null;
   }, []);
 
+  const resolveWindowProvider = useCallback((): Eip1193Provider | null => {
+    const preferred = getPreferredProvider();
+    if (preferred) {
+      return preferred;
+    }
+
+    return resolveWindowProviderFromWindow();
+  }, [resolveWindowProviderFromWindow]);
+
   const deriveWalletType = useCallback(
     (provider?: Eip1193Provider | null): WalletType => {
       const candidate = provider ?? providerRef.current ?? resolveWindowProvider();
       const win = typeof window !== 'undefined' ? (window as WalletWindow) : undefined;
 
-      if (candidate?.isSafePal || win?.safePal?.isSafePal) {
+      const info = getPreferredProviderInfo();
+      const preferred = getPreferredProvider();
+      if (info && (!candidate || !preferred || candidate === preferred)) {
+        if (isSafePalProvider(candidate, info)) {
+          return 'safepal';
+        }
+        if (isMetaMaskProvider(candidate, info)) {
+          return 'metamask';
+        }
+      }
+
+      if (isSafePalProvider(candidate, info) || win?.safePal?.isSafePal) {
         return 'safepal';
       }
 
-      if (candidate?.isMetaMask || win?.ethereum?.isMetaMask) {
+      if (isMetaMaskProvider(candidate, info) || win?.ethereum?.isMetaMask) {
         return 'metamask';
       }
 
@@ -170,16 +220,28 @@ export const useWallet = () => {
   }, [resolveWindowProvider]);
 
   const requestWithGuards = useCallback(
-    async (provider: Eip1193Provider, args: { method: string; params?: any[] } | string) => {
-      const requestObject = typeof args === 'string' ? { method: args } : args;
+    async <TResult = unknown>(
+      provider: Eip1193Provider,
+      args: Eip1193RequestArguments | string,
+    ): Promise<TResult> => {
+      const requestObject: Eip1193RequestArguments =
+        typeof args === 'string' ? { method: args } : args;
+
       enforceWalletRequestGuards(requestObject.method, walletStateRef.current);
-      return provider.request(requestObject);
+
+      const fallback = resolveMethodFallback(requestObject.method);
+
+      try {
+        return (await provider.request(requestObject)) as TResult;
+      } catch (error: unknown) {
+        throw normalizeWalletError(error, fallback.code, fallback.message);
+      }
     },
     [],
   );
 
-  const setError = (message: string | null) => {
-    setWalletState((prev) => ({ ...prev, error: message }));
+  const setError = (message: string | null, errorCode: number | null = null) => {
+    setWalletState((prev) => ({ ...prev, error: message, errorCode }));
   };
 
   const authenticateWallet = useCallback(
@@ -194,15 +256,22 @@ export const useWallet = () => {
 
       let signature: string;
       try {
-        signature = await requestWithGuards(provider, {
+        signature = await requestWithGuards<string>(provider, {
           method: 'personal_sign',
           params: [message, address],
         });
-      } catch (signError: any) {
-        if (signError?.code === 4001) {
-          throw new Error('Signature request was rejected');
+      } catch (signError: unknown) {
+        const normalizedError = normalizeWalletError(
+          signError,
+          4001,
+          'Signature request was rejected.',
+        );
+
+        if (normalizedError.code === 4001) {
+          throw createWalletError(4001, 'Signature request was rejected.', normalizedError.data);
         }
-        throw signError;
+
+        throw normalizedError;
       }
 
       const verification = await ApiService.verifySiweSignature(message, signature);
@@ -218,7 +287,7 @@ export const useWallet = () => {
     [getProvider, registerPendingReferral, requestWithGuards],
   );
 
-  const resetToDisconnected = useCallback((errorMessage?: string) => {
+  const resetToDisconnected = useCallback((errorMessage?: string, errorCode: number | null = null) => {
     clearPersistedWallet();
     ApiService.markSessionActive(false);
     isConnectingRef.current = false;
@@ -234,6 +303,7 @@ export const useWallet = () => {
       isAuthenticating: false,
       needsAuth: false,
       error: errorMessage ?? null,
+      errorCode,
       isFrameBlocked: prev.isFrameBlocked,
       walletType: null,
     }));
@@ -267,11 +337,18 @@ export const useWallet = () => {
     setWalletState((prev) => ({ ...prev, isConnecting: true, error: null, walletType: normalizedType }));
 
     try {
-      const accounts: string[] = await requestWithGuards(provider, { method: 'eth_requestAccounts' });
-      const chainIdHex: string = await requestWithGuards(provider, { method: 'eth_chainId' });
+      const accounts = await requestWithGuards<string[]>(provider, { method: 'eth_requestAccounts' });
+      const chainIdHex = await requestWithGuards<string>(provider, { method: 'eth_chainId' });
       const chainIdNumber = Number.parseInt(chainIdHex, 16);
 
       persistWallet(chainIdNumber, accounts[0], normalizedType ?? undefined, true);
+
+      const requiresChainSwitch = chainIdNumber !== 56;
+      const connectionErrorMessage = requiresChainSwitch
+        ? 'Unsupported chain detected. Please switch to BNB Smart Chain (0x38).'
+        : null;
+      const connectionErrorCode = requiresChainSwitch ? 4901 : null;
+
       setWalletState((prev) => ({
         isConnected: true,
         address: accounts[0],
@@ -281,19 +358,26 @@ export const useWallet = () => {
         isConnecting: false,
         isAuthenticating: false,
         needsAuth: true,
-        error: null,
+        error: connectionErrorMessage,
+        errorCode: connectionErrorCode,
         isFrameBlocked: prev.isFrameBlocked,
         walletType: normalizedType,
       }));
       hasRequestedAccountsRef.current = true;
       const label = normalizedType ? normalizedType.toUpperCase() : 'WALLET';
       console.log(`✅ ${label} connected: ${formatCaip10(chainIdNumber, accounts[0])}`);
-    } catch (error: any) {
-      console.error('Error connecting wallet:', error);
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(
+        error,
+        4001,
+        'Wallet connection request failed.',
+      );
+      console.error('Error connecting wallet:', normalizedError);
       setWalletState((prev) => ({
         ...prev,
         isConnecting: false,
-        error: error?.message ?? 'Failed to connect wallet',
+        error: normalizedError.message,
+        errorCode: normalizedError.code,
         walletType: prev.walletType ?? normalizedType,
       }));
     } finally {
@@ -325,10 +409,16 @@ export const useWallet = () => {
         isAuthenticating: false,
         needsAuth: false,
         error: null,
+        errorCode: null,
         walletType: prev.walletType,
       }));
-    } catch (error: any) {
-      console.error('❌ Wallet authentication failed:', error);
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(
+        error,
+        4001,
+        'Wallet authentication failed.',
+      );
+      console.error('❌ Wallet authentication failed:', normalizedError);
       if (walletState.chainId && walletState.address) {
         persistWallet(
           walletState.chainId,
@@ -341,7 +431,8 @@ export const useWallet = () => {
         ...prev,
         isAuthenticating: false,
         needsAuth: true,
-        error: error?.message ?? 'Wallet authentication failed',
+        error: normalizedError.message,
+        errorCode: normalizedError.code,
         walletType: prev.walletType,
       }));
     } finally {
@@ -367,15 +458,37 @@ export const useWallet = () => {
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: `0x${targetChainId.toString(16)}` }],
       });
-    } catch (error: any) {
-      if (error?.code === 4902) {
-        await requestWithGuards(provider, {
-          method: 'wallet_addEthereumChain',
-          params: [BSC_NETWORK],
-        });
-      } else {
-        throw error;
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(
+        error,
+        4901,
+        'Unable to switch to the requested chain.',
+      );
+
+      if (normalizedError.code === 4902) {
+        try {
+          await requestWithGuards(provider, {
+            method: 'wallet_addEthereumChain',
+            params: [BSC_NETWORK],
+          });
+
+          await requestWithGuards(provider, {
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: `0x${targetChainId.toString(16)}` }],
+          });
+          return;
+        } catch (addChainError: unknown) {
+          const normalizedAddError = normalizeWalletError(
+            addChainError,
+            4901,
+            'Unable to add the requested chain to the wallet.',
+          );
+
+          throw normalizedAddError;
+        }
       }
+
+      throw normalizedError;
     }
   }, [getProvider, requestWithGuards]);
 
@@ -397,7 +510,7 @@ export const useWallet = () => {
 
       let chainIdNumber = walletState.chainId ?? 56;
       try {
-        const chainIdHex: string = await requestWithGuards(provider, { method: 'eth_chainId' });
+        const chainIdHex = await requestWithGuards<string>(provider, { method: 'eth_chainId' });
         if (chainIdHex) {
           chainIdNumber = Number.parseInt(chainIdHex, 16);
         }
@@ -417,6 +530,7 @@ export const useWallet = () => {
         chainType: getChainType(chainIdNumber),
         needsAuth: true,
         error: 'Account changed. Please sign in again.',
+        errorCode: null,
         walletType: normalizedType ?? prev.walletType,
       }));
       ApiService.markSessionActive(false);
@@ -428,32 +542,70 @@ export const useWallet = () => {
       }
 
       const chainIdNumber = Number.parseInt(chainIdHex, 16);
+      const requiresChainSwitch = chainIdNumber !== 56;
       setWalletState((prev) => ({
         ...prev,
         chainId: chainIdNumber,
         chainType: getChainType(chainIdNumber),
         needsAuth: prev.isConnected ? true : prev.needsAuth,
         walletType: prev.walletType,
+        error: requiresChainSwitch
+          ? 'Unsupported chain detected. Please switch to BNB Smart Chain (0x38).'
+          : prev.errorCode === 4901
+            ? null
+            : prev.error,
+        errorCode: requiresChainSwitch ? 4901 : prev.errorCode === 4901 ? null : prev.errorCode,
       }));
+    };
+
+    const handleDisconnect = (event: Eip1193DisconnectEvent) => {
+      const normalized = normalizeWalletError(
+        event ?? { code: 4900, message: 'Provider disconnected.' },
+        4900,
+        'Wallet disconnected.',
+      );
+
+      console.warn('Wallet provider disconnected:', normalized);
+      clearPreferredProvider();
+      providerRef.current = null;
+      resetToDisconnected(normalized.message, normalized.code);
     };
 
     provider.on?.('accountsChanged', handleAccountsChanged);
     provider.on?.('chainChanged', handleChainChanged);
+    provider.on?.('disconnect', handleDisconnect as (event: unknown) => void);
 
     return () => {
       provider.removeListener?.('accountsChanged', handleAccountsChanged);
       provider.removeListener?.('chainChanged', handleChainChanged);
+      provider.removeListener?.('disconnect', handleDisconnect as (event: unknown) => void);
     };
-  }, [deriveWalletType, disconnectWallet, getProvider, requestWithGuards, walletState.chainId, walletState.isConnected]);
+  }, [deriveWalletType, disconnectWallet, getProvider, requestWithGuards, resetToDisconnected, walletState.chainId, walletState.isConnected]);
 
   useEffect(() => {
-    const handleProviderAnnouncement = (event: any) => {
-      if (event?.detail?.provider) {
-        providerRef.current = event.detail.provider;
-        const type = deriveWalletType(event.detail.provider);
-        if (!walletStateRef.current?.walletType && type !== 'unknown') {
-          setWalletState((prev) => ({ ...prev, walletType: type }));
-        }
+    const handleProviderAnnouncement = (event: Eip6963AnnounceProviderEvent) => {
+      const detail = event?.detail;
+      if (!detail?.provider) {
+        return;
+      }
+
+      const { provider, info } = detail;
+      const currentPreferred = getPreferredProvider();
+      const currentInfo = getPreferredProviderInfo();
+      const candidateIsMetaMask = isMetaMaskProvider(provider, info);
+      const currentIsMetaMask = isMetaMaskProvider(currentPreferred ?? undefined, currentInfo);
+
+      const shouldPromoteCandidate =
+        !currentPreferred || currentPreferred === provider || (candidateIsMetaMask && !currentIsMetaMask);
+
+      if (shouldPromoteCandidate) {
+        setPreferredProvider(provider, info);
+        providerRef.current = provider;
+      }
+
+      const type = deriveWalletType(provider);
+      if (!walletStateRef.current?.walletType && type !== 'unknown') {
+        setWalletState((prev) => ({ ...prev, walletType: type }));
       }
     };
 
@@ -463,6 +615,9 @@ export const useWallet = () => {
     const initialProvider = resolveWindowProvider();
     if (initialProvider && !providerRef.current) {
       providerRef.current = initialProvider;
+      if (!getPreferredProvider()) {
+        setPreferredProvider(initialProvider);
+      }
       const type = deriveWalletType(initialProvider);
       if (!walletStateRef.current?.walletType && type !== 'unknown') {
         setWalletState((prev) => ({ ...prev, walletType: type }));
@@ -491,6 +646,7 @@ export const useWallet = () => {
         isConnecting: false,
         isAuthenticating: false,
         error: 'Wallet connections are disabled inside embedded frames.',
+        errorCode: null,
       }));
     }
   }, []);

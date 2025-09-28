@@ -1,6 +1,7 @@
 import { PaymentService } from '../payment.service';
 import { ethers } from 'ethers';
 import { PAYMENT_CONFIG } from '../../config/payment.config';
+import { clearPreferredProvider } from '../../utils/providerRegistry';
 
 type EthereumLike = {
   request: jest.Mock;
@@ -22,6 +23,7 @@ describe('PaymentService (frontend helpers)', () => {
   const originalGateway = PAYMENT_CONFIG.PAYMENT_GATEWAY_CONTRACT;
 
   beforeEach(() => {
+    clearPreferredProvider();
     ethereum = {
       request: jest.fn(),
     };
@@ -45,6 +47,7 @@ describe('PaymentService (frontend helpers)', () => {
     jest.restoreAllMocks();
     global.window = originalWindow;
     (PAYMENT_CONFIG as any).PAYMENT_GATEWAY_CONTRACT = originalGateway;
+    clearPreferredProvider();
   });
 
   describe('isMetaMaskInstalled', () => {
@@ -65,7 +68,7 @@ describe('PaymentService (frontend helpers)', () => {
 
       const result = await PaymentService.ensureBscNetwork();
 
-      expect(ethereum.request).toHaveBeenCalledWith({ method: 'eth_chainId' });
+      expect(ethereum.request).toHaveBeenCalledWith({ method: 'eth_chainId', params: [] });
       expect(switchSpy).not.toHaveBeenCalled();
       expect(result).toEqual({ success: true, chainId: 56 });
 
@@ -78,7 +81,7 @@ describe('PaymentService (frontend helpers)', () => {
 
       const result = await PaymentService.ensureBscNetwork();
 
-      expect(ethereum.request).toHaveBeenCalledWith({ method: 'eth_chainId' });
+      expect(ethereum.request).toHaveBeenCalledWith({ method: 'eth_chainId', params: [] });
       expect(switchSpy).toHaveBeenCalled();
       expect(result).toEqual({ success: true, chainId: 56 });
 
@@ -89,7 +92,7 @@ describe('PaymentService (frontend helpers)', () => {
       global.window = {} as Window;
 
       const result = await PaymentService.ensureBscNetwork();
-      expect(result).toEqual({ success: false, error: 'Wallet provider not detected' });
+      expect(result).toEqual({ success: false, error: 'Wallet provider not detected', errorCode: 4900 });
 
       global.window = { ethereum } as unknown as Window;
     });
@@ -105,6 +108,7 @@ describe('PaymentService (frontend helpers)', () => {
       expect(switchSpy).toHaveBeenCalled();
       expect(result.success).toBe(false);
       expect(result.error).toBe('switch failed');
+      expect(result.errorCode).toBe(4901);
 
       switchSpy.mockRestore();
     });

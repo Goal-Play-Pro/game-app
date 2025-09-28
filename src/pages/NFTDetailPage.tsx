@@ -14,10 +14,29 @@ import {
   Users
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import ApiService from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
 import { shareContent } from '../utils/share.utils';
+
+interface NftDetail {
+  id: string;
+  name: string;
+  image: string;
+  rarity: string;
+  isLiked: boolean;
+  likes: number;
+  views: number;
+  owners: number;
+  tokenId: string;
+  price: string;
+  description: string;
+  collection: string;
+  mintedAt: string;
+  creator: {
+    name: string;
+    avatar: string;
+  };
+}
 
 const NFTDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +44,7 @@ const NFTDetailPage = () => {
   const [showFullDescription, setShowFullDescription] = useState(false);
 
   // Fetch NFT details
-  const { data: nft, isLoading, error } = useQuery({
+  const { data: nft, isLoading, error } = useQuery<NftDetail | null>({
     queryKey: ['nft', id],
     queryFn: () => {
       // Mock implementation for now
@@ -74,6 +93,9 @@ const NFTDetailPage = () => {
   };
 
   const handleLike = async () => {
+    if (!nft) {
+      return;
+    }
     try {
       // Mock implementation for now
       console.log('Like NFT:', nft?.id);
@@ -84,6 +106,9 @@ const NFTDetailPage = () => {
   };
 
   const handleShare = () => {
+    if (!nft) {
+      return;
+    }
     // Usar utilidad robusta de compartir
     shareContent({
       title: nft.name,
@@ -100,6 +125,9 @@ const NFTDetailPage = () => {
   };
 
   const handleBuy = async () => {
+    if (!nft) {
+      return;
+    }
     try {
       // Mock implementation for now
       const success = true;
@@ -115,67 +143,140 @@ const NFTDetailPage = () => {
 
   return (
     <div className="pt-24 pb-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* Left Column - Image */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-6"
-          >
-            {/* Main Image */}
-            <div className="relative aspect-square overflow-hidden rounded-2xl glass">
-              <img
-                src={nft.image}
-                alt={nft.name}
-                className="w-full h-full object-cover"
-              />
-              
-              {/* Rarity Badge */}
-              <div className={`absolute top-4 left-4 px-3 py-1 rounded-full text-sm font-semibold text-white bg-gradient-to-r ${getRarityColor(nft.rarity)}`}>
-                {nft.rarity}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="glass rounded-2xl p-8"
+        >
+          <div className="flex flex-col lg:flex-row gap-8">
+            <div className="lg:w-1/2 space-y-4">
+              <div className="relative aspect-square overflow-hidden rounded-2xl bg-black/20">
+                <img
+                  src={nft.image}
+                  alt={nft.name}
+                  className="w-full h-full object-cover"
+                />
+                <div
+                  className={`absolute top-4 left-4 px-3 py-1 rounded-full text-sm font-semibold text-white bg-gradient-to-r ${getRarityColor(nft.rarity)}`}
+                >
+                  {nft.rarity}
+                </div>
+                <div className="absolute top-4 right-4 flex space-x-2">
+                  <motion.button
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
+                    onClick={handleLike}
+                    className={`p-3 rounded-full backdrop-blur-md transition-colors ${
+                      nft.isLiked
+                        ? 'bg-red-500/80 text-white'
+                        : 'bg-black/40 text-white hover:bg-red-500/80'
+                    }`}
+                  >
+                    <Heart className={`w-5 h-5 ${nft.isLiked ? 'fill-current' : ''}`} />
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
+                    onClick={handleShare}
+                    className="p-3 rounded-full bg-black/40 text-white hover:bg-neon-blue/80 backdrop-blur-md transition-colors"
+                  >
+                    <Share2 className="w-5 h-5" />
+                  </motion.button>
+                </div>
               </div>
-              
-              {/* Quick Actions */}
-              <div className="absolute top-4 right-4 flex space-x-2">
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleLike}
-                  className={`p-3 rounded-full backdrop-blur-md transition-colors ${
-                    nft.isLiked 
-                      ? 'bg-red-500/80 text-white' 
-                      : 'bg-black/40 text-white hover:bg-red-500/80'
-                  }`}
-                >
-                  <Heart className={`w-5 h-5 ${nft.isLiked ? 'fill-current' : ''}`} />
-                </motion.button>
-                
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleShare}
-                  className="p-3 rounded-full bg-black/40 text-white hover:bg-neon-blue/80 backdrop-blur-md transition-colors"
-                >
-                  <Share2 className="w-5 h-5" />
-                </motion.button>
-                
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  className="p-3 rounded-full bg-black/40 text-white hover:bg-neon-blue/80 backdrop-blur-md transition-colors"
-                >
-                  <MoreHorizontal className="w-5 h-5" />
-                </motion.button>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="glass rounded-xl p-4 text-center space-y-1">
+                  <Heart className="w-5 h-5 mx-auto text-red-400" />
+                  <span className="text-lg font-semibold text-white">{nft.likes}</span>
+                  <p className="text-xs text-gray-400">Likes</p>
+                </div>
+                <div className="glass rounded-xl p-4 text-center space-y-1">
+                  <Eye className="w-5 h-5 mx-auto text-blue-400" />
+                  <span className="text-lg font-semibold text-white">{nft.views}</span>
+                  <p className="text-xs text-gray-400">Views</p>
+                </div>
+                <div className="glass rounded-xl p-4 text-center space-y-1">
+                  <Users className="w-5 h-5 mx-auto text-green-400" />
+                  <span className="text-lg font-semibold text-white">{nft.owners}</span>
+                  <p className="text-xs text-gray-400">Owners</p>
+                </div>
               </div>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="glass rounded-xl p-4 text-center">
-                <div className="flex items-center justify-center mb-2">
-                  <Heart className="w-5 h-5 text-red-400" />
+            <div className="lg:w-1/2 space-y-6">
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-2">{nft.name}</h1>
+                <p className="text-sm text-gray-400">Token ID: {nft.tokenId}</p>
+              </div>
+
+              <div className="glass rounded-xl p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-400">Current Price</span>
+                  <span className="text-2xl font-semibold text-white flex items-center space-x-2">
+                    <Zap className="w-5 h-5 text-yellow-400" />
+                    <span>{nft.price}</span>
+                  </span>
                 </div>
-                <div className="text-lg font-semibold text-white">{nft.likes}</div>
-  )
-}
+                <button
+                  type="button"
+                  onClick={handleBuy}
+                  className="btn-primary w-full flex items-center justify-center space-x-2"
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  <span>Buy Now</span>
+                </button>
+              </div>
+
+              <div className="glass rounded-xl p-5 space-y-3">
+                <h2 className="text-lg font-semibold text-white">Description</h2>
+                <p className="text-gray-300 text-sm leading-relaxed">
+                  {showFullDescription ? nft.description : `${nft.description.slice(0, 180)}...`}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowFullDescription((value) => !value)}
+                  className="text-neon-blue text-sm font-semibold hover:underline"
+                >
+                  {showFullDescription ? 'Show less' : 'Read more'}
+                </button>
+              </div>
+
+              <div className="glass rounded-xl p-5 space-y-3">
+                <div className="flex items-center justify-between text-sm text-gray-300">
+                  <span>Creator</span>
+                  <span className="flex items-center space-x-2">
+                    <img
+                      src={nft.creator.avatar}
+                      alt={nft.creator.name}
+                      className="w-8 h-8 rounded-full"
+                    />
+                    <span>{nft.creator.name}</span>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm text-gray-300">
+                  <span>Minted</span>
+                  <span className="flex items-center space-x-2">
+                    <Clock className="w-4 h-4" />
+                    <span>{nft.mintedAt}</span>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm text-gray-300">
+                  <span>Collection</span>
+                  <span className="flex items-center space-x-2">
+                    <TrendingUp className="w-4 h-4" />
+                    <span>{nft.collection}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+};
+
+export default NFTDetailPage;

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { usePayment } from '../../hooks/usePayment';
 import { useWallet } from '../../hooks/useWallet';
+import { normalizeWalletError } from '../../utils/walletErrors';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { PAYMENT_CONFIG } from '../../config/payment.config';
 import { ChainType } from '../../types';
@@ -223,10 +224,14 @@ const PaymentModal = ({ isOpen, onClose, order }: PaymentModalProps) => {
     setIsSwitchingNetwork(true);
     try {
       await switchToNetwork(TARGET_CHAIN_ID);
-    } catch (error: any) {
-      console.error('Failed to switch network:', error);
-      const message = error?.message || 'Failed to switch network. Please approve the request in your wallet.';
-      setNetworkError(message);
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(
+        error,
+        4901,
+        'Failed to switch network. Please approve the request in your wallet.',
+      );
+      console.error('Failed to switch network:', normalizedError);
+      setNetworkError(normalizedError.message);
     } finally {
       setIsSwitchingNetwork(false);
     }
