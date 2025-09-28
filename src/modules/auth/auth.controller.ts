@@ -2,7 +2,7 @@ import { Controller, Post, Body, HttpStatus, Get, Put, UseGuards, Request, Res }
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import type { CreateSiweChallenge, VerifySiweSignature, CreateSolanaChallenge, VerifySolanaSignature } from './dto/auth.dto';
+import { CreateSiweChallenge, VerifySiweSignature, CreateSolanaChallenge, VerifySolanaSignature } from './dto/auth.dto';
 import type { Response } from 'express';
 import { AUTH_COOKIE_NAME } from './auth.constants';
 import { LoggerService } from '../../common/services/logger.service';
