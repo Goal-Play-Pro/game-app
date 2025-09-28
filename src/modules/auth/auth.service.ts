@@ -456,14 +456,36 @@ export class AuthService {
     const domainUrl = this.safeParseUrl(domainSource, originUrl.origin);
     let asciiDomainHostname = domainToASCII(domainUrl.hostname) || domainUrl.hostname;
 
-    if (asciiDomainHostname !== asciiOriginHostname) {
+    const toAuthority = (hostname: string, url: URL): string => {
+      const isDefaultPort = (protocol: string, port: string) => {
+        if (!port) {
+          return true;
+        }
+        return (protocol === 'http:' && port === '80') || (protocol === 'https:' && port === '443');
+      };
+
+      const portSegment = isDefaultPort(url.protocol, url.port) ? '' : `:${url.port}`;
+      return `${hostname}${portSegment}`;
+    };
+
+    const originAuthority = toAuthority(asciiOriginHostname, originUrl);
+    let domainAuthority = toAuthority(asciiDomainHostname, domainUrl);
+
+    if (domainAuthority !== originAuthority) {
       asciiDomainHostname = asciiOriginHostname;
+      domainUrl.hostname = asciiDomainHostname;
+      if (originUrl.port) {
+        domainUrl.port = originUrl.port;
+      } else {
+        domainUrl.port = '';
+      }
+      domainAuthority = originAuthority;
+    } else {
+      domainUrl.hostname = asciiDomainHostname;
     }
 
-    domainUrl.hostname = asciiDomainHostname;
-
     return {
-      domain: asciiDomainHostname,
+      domain: domainAuthority,
       origin: originUrl.origin,
     };
   }

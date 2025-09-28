@@ -111,6 +111,21 @@ describe('AuthService.verifySiweSignature', () => {
       await expect(service.createSiweChallenge('not-an-address', 1, 'Hi')).rejects.toBeInstanceOf(UnauthorizedException);
       expect(challenges.save).not.toHaveBeenCalled();
     });
+
+    it('keeps non-default ports in the SIWE domain', async () => {
+      challenges.save.mockImplementation(async (payload) => payload);
+
+      const result = await service.createSiweChallenge(
+        checksumAddress,
+        56,
+        'Welcome',
+        'localhost:5173',
+        'http://localhost:5173',
+      );
+
+      expect(result.message).toContain('localhost:5173 wants you to sign in with your Ethereum account');
+      expect(result.message).toContain('URI: http://localhost:5173');
+    });
   });
 
   it('throws when challenge not found', async () => {
