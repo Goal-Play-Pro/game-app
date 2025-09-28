@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Users, 
@@ -82,8 +82,8 @@ const ReferralDashboard = () => {
           isActive: true,
           totalReferrals: 0,
           totalCommissions: '0.00',
-          createdAt: new Date(),
-          updatedAt: new Date()
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         };
       }
     },
@@ -136,6 +136,30 @@ const ReferralDashboard = () => {
     }
   };
 
+  const thisMonthReferralCount = useMemo(() => {
+    if (!referralStats?.recentReferrals) {
+      return 0;
+    }
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    return referralStats.recentReferrals.reduce((count, referral) => {
+      const timestamp = referral.createdAt || referral.registeredAt;
+      if (!timestamp) {
+        return count;
+      }
+
+      const createdDate = new Date(timestamp);
+      if (Number.isNaN(createdDate.getTime())) {
+        return count;
+      }
+
+      return createdDate >= startOfMonth ? count + 1 : count;
+    }, 0);
+  }, [referralStats?.recentReferrals]);
+
   // Check if we have wallet connection instead of just auth status
   if (!walletConnected || !walletAddress) {
     logWalletRequirement('Referral dashboard');
@@ -184,7 +208,7 @@ const ReferralDashboard = () => {
           </p>
           
           <button
-            onClick={() => createCodeMutation.mutate()}
+            onClick={() => createCodeMutation.mutate(undefined)}
             disabled={createCodeMutation.isPending}
             className="btn-primary flex items-center space-x-2 mx-auto disabled:opacity-50"
           >
@@ -262,7 +286,7 @@ const ReferralDashboard = () => {
             <TrendingUp className="w-5 h-5 text-green-400" />
           </div>
           <h3 className="text-2xl font-bold text-white mb-1">
-            {referralStats?.thisMonthReferrals || 0}
+            {thisMonthReferralCount}
           </h3>
           <p className="text-gray-400 text-sm">This Month</p>
         </motion.div>
@@ -335,28 +359,35 @@ const ReferralDashboard = () => {
         >
           <h3 className="text-xl font-bold text-white mb-4">Recent Activity</h3>
           <div className="space-y-3">
-            {referralStats.recentReferrals.map((referral, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-gray-800/30 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-football-green/20 rounded-full flex items-center justify-center">
-                    <Users className="w-4 h-4 text-football-green" />
+            {referralStats.recentReferrals.map(referral => {
+              const timestamp = referral.createdAt || referral.registeredAt;
+              const parsedDate = timestamp ? new Date(timestamp) : null;
+              const hasValidDate = parsedDate && !Number.isNaN(parsedDate.getTime());
+              const formattedDate = hasValidDate ? parsedDate.toLocaleDateString() : 'Unknown date';
+
+              return (
+                <div key={referral.id} className="flex items-center justify-between p-3 bg-gray-800/30 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-football-green/20 rounded-full flex items-center justify-center">
+                      <Users className="w-4 h-4 text-football-green" />
+                    </div>
+                    <div>
+                      <p className="text-white text-sm font-medium">
+                        New referral joined
+                      </p>
+                      <p className="text-gray-400 text-xs">
+                        {formattedDate}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-white text-sm font-medium">
-                      New referral joined
-                    </p>
-                    <p className="text-gray-400 text-xs">
-                      {new Date(referral.createdAt).toLocaleDateString()}
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-300">
+                      {referral.isActive ? 'Active' : 'Pending'}
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-football-green text-sm font-medium">
-                    +{formatCurrency(referral.commission || '0')}
-                  </p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </motion.div>
       )}

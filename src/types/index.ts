@@ -105,6 +105,7 @@ export interface OwnedPlayer {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  player?: GachaPlayer | null;
 }
 
 export interface PlayerKit {

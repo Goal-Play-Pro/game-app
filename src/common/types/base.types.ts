@@ -138,6 +138,7 @@ export interface OwnedPlayerEntity extends BaseEntity {
   experience: number;
   isActive: boolean;
   division?: string;
+  player?: GachaPlayerEntity | null;
 }
 
 export interface GachaPlayerEntity extends BaseEntity {

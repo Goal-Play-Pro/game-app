@@ -15,7 +15,7 @@ interface Particle {
 const FloatingParticles = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | null>(null);
 
   const colors = ['#00b894', '#0984e3', '#6c5ce7', '#e17055', '#fdcb6e'];
 
@@ -126,8 +126,9 @@ const FloatingParticles = () => {
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (animationRef.current) {
+      if (animationRef.current !== null) {
         cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
       }
     };
   }, []);

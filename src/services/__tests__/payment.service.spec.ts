@@ -2,20 +2,19 @@ import { PaymentService } from '../payment.service';
 import { ethers } from 'ethers';
 import { PAYMENT_CONFIG } from '../../config/payment.config';
 import { clearPreferredProvider } from '../../utils/providerRegistry';
-
-type EthereumLike = {
-  request: jest.Mock;
-};
-
-declare global {
-  interface Window {
-    ethereum?: EthereumLike;
-  }
-}
+import type { Eip1193Provider, WalletWindow } from '../../types/wallet';
 
 describe('PaymentService (frontend helpers)', () => {
-  const originalWindow = global.window;
-  let ethereum: EthereumLike;
+  const globalAny = global as unknown as { window?: WalletWindow & typeof globalThis };
+  const originalWindow = globalAny.window;
+
+  const createMockWindow = (overrides: Partial<WalletWindow> = {}) => {
+    const prototype = originalWindow ?? ({} as WalletWindow & typeof globalThis);
+    const base = Object.create(prototype) as WalletWindow & typeof globalThis;
+    return Object.assign(base, overrides);
+  };
+
+  let ethereum: jest.Mocked<Eip1193Provider>;
   let mockContract: any;
   let browserProviderSpy: jest.SpyInstance;
   let contractSpy: jest.SpyInstance;
@@ -26,8 +25,9 @@ describe('PaymentService (frontend helpers)', () => {
     clearPreferredProvider();
     ethereum = {
       request: jest.fn(),
-    };
-    global.window = { ethereum } as unknown as Window;
+    } as unknown as jest.Mocked<Eip1193Provider>;
+
+    globalAny.window = createMockWindow({ ethereum });
 
     mockContract = {
       balanceOf: jest.fn(),
@@ -45,7 +45,11 @@ describe('PaymentService (frontend helpers)', () => {
   afterEach(() => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
-    global.window = originalWindow;
+    if (originalWindow) {
+      globalAny.window = originalWindow;
+    } else {
+      delete globalAny.window;
+    }
     (PAYMENT_CONFIG as any).PAYMENT_GATEWAY_CONTRACT = originalGateway;
     clearPreferredProvider();
   });
@@ -56,8 +60,12 @@ describe('PaymentService (frontend helpers)', () => {
     });
 
     it('returns false when window is missing', () => {
-      global.window = undefined as unknown as Window;
+      const previousWindow = globalAny.window;
+      delete globalAny.window;
       expect(PaymentService.isMetaMaskInstalled()).toBe(false);
+      if (previousWindow) {
+        globalAny.window = previousWindow;
+      }
     });
   });
 
@@ -89,12 +97,17 @@ describe('PaymentService (frontend helpers)', () => {
     });
 
     it('returns error when provider missing', async () => {
-      global.window = {} as Window;
+      const previousWindow = globalAny.window;
+      globalAny.window = createMockWindow();
 
       const result = await PaymentService.ensureBscNetwork();
       expect(result).toEqual({ success: false, error: 'Wallet provider not detected', errorCode: 4900 });
 
-      global.window = { ethereum } as unknown as Window;
+      if (previousWindow) {
+        globalAny.window = previousWindow;
+      } else {
+        delete globalAny.window;
+      }
     });
 
     it('propagates switch errors', async () => {

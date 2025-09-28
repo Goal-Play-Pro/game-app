@@ -2,16 +2,36 @@
 
 import { shareContent, showCopyNotification } from './share.utils';
 
-declare global {
-  interface Navigator {
-    share?: jest.Mock;
-    canShare?: jest.Mock;
-    clipboard?: { writeText: jest.Mock };
+type MutableNavigatorProps = 'share' | 'canShare' | 'clipboard';
+
+const setNavigatorProperty = <K extends MutableNavigatorProps>(key: K, value: Navigator[K]) => {
+  Object.defineProperty(navigator, key, {
+    configurable: true,
+    value,
+    writable: false,
+  });
+};
+
+const deleteNavigatorProperty = (key: MutableNavigatorProps) => {
+  delete (navigator as unknown as Record<string, unknown>)[key];
+};
+
+const originalNavigatorState: Record<MutableNavigatorProps, Navigator[MutableNavigatorProps]> = {
+  share: navigator.share,
+  canShare: navigator.canShare,
+  clipboard: navigator.clipboard,
+};
+
+const restoreNavigatorProperty = (key: MutableNavigatorProps) => {
+  const originalValue = originalNavigatorState[key];
+  if (typeof originalValue === 'undefined') {
+    deleteNavigatorProperty(key);
+  } else {
+    setNavigatorProperty(key, originalValue);
   }
-}
+};
 
 describe('shareContent', () => {
-  const originalNavigator = { ...global.navigator };
   const originalPrompt = global.prompt;
 
   beforeEach(() => {
@@ -23,7 +43,7 @@ describe('shareContent', () => {
   });
 
   afterEach(() => {
-    Object.assign(navigator, originalNavigator);
+    (['share', 'canShare', 'clipboard'] as MutableNavigatorProps[]).forEach(restoreNavigatorProperty);
     global.prompt = originalPrompt as any;
     document.getElementById('copy-notification')?.remove();
     document.getElementById('copy-notification-styles')?.remove();
@@ -36,9 +56,9 @@ describe('shareContent', () => {
   };
 
   it('uses Web Share API when available', async () => {
-    const shareMock = jest.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true });
-    Object.defineProperty(navigator, 'canShare', { value: jest.fn().mockReturnValue(true), configurable: true });
+    const shareMock = jest.fn().mockResolvedValue(undefined) as jest.MockedFunction<NonNullable<Navigator['share']>>;
+    setNavigatorProperty('share', shareMock);
+    setNavigatorProperty('canShare', jest.fn().mockReturnValue(true) as Navigator['canShare']);
 
     const result = await shareContent(sampleShare);
 
@@ -47,22 +67,24 @@ describe('shareContent', () => {
   });
 
   it('falls back to clipboard API on share failure', async () => {
-    Object.defineProperty(navigator, 'share', { value: jest.fn().mockRejectedValue(new Error('fail')), configurable: true });
-    Object.defineProperty(navigator, 'canShare', { value: jest.fn().mockReturnValue(true), configurable: true });
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText: jest.fn().mockResolvedValue(undefined) },
-      configurable: true,
-    });
+    setNavigatorProperty('share', jest.fn().mockRejectedValue(new Error('fail')) as Navigator['share']);
+    setNavigatorProperty('canShare', jest.fn().mockReturnValue(true) as Navigator['canShare']);
+    setNavigatorProperty(
+      'clipboard',
+      {
+        writeText: jest.fn().mockResolvedValue(undefined),
+      } as unknown as Navigator['clipboard'],
+    );
 
     const result = await shareContent(sampleShare, { showNotification: false });
 
-    expect((navigator as any).clipboard.writeText).toHaveBeenCalledWith(sampleShare.url);
+    expect(navigator.clipboard?.writeText).toHaveBeenCalledWith(sampleShare.url);
     expect(result).toEqual({ success: true, method: 'clipboard' });
   });
 
   it('prompts user when clipboard APIs unavailable', async () => {
-    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
-    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    setNavigatorProperty('share', undefined);
+    setNavigatorProperty('clipboard', undefined as unknown as Navigator['clipboard']);
     (document.execCommand as jest.Mock).mockReturnValue(false);
     global.prompt = jest.fn().mockReturnValue('copied');
 
@@ -72,8 +94,8 @@ describe('shareContent', () => {
   });
 
   it('returns failure when all methods fail', async () => {
-    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
-    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    setNavigatorProperty('share', undefined);
+    setNavigatorProperty('clipboard', undefined as unknown as Navigator['clipboard']);
     (document.execCommand as jest.Mock).mockReturnValue(false);
     global.prompt = jest.fn().mockReturnValue(null);
 

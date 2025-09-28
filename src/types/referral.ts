@@ -7,8 +7,8 @@ export interface ReferralCodeDto {
   isActive: boolean;
   totalReferrals: number;
   totalCommissions: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ReferralRegistrationDto {
@@ -22,8 +22,8 @@ export interface ReferralRegistrationDto {
   referralCode: string;
   registeredAt: string;
   isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ReferralCommissionDto {
@@ -40,8 +40,8 @@ export interface ReferralCommissionDto {
   commissionPercentage: number;
   status: 'pending' | 'paid' | 'failed';
   paidAt?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ReferralStatsDto {

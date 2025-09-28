@@ -51,7 +51,7 @@ describe('AuthService.verifySiweSignature', () => {
     };
 
     service = new AuthService(
-      jwt as JwtService,
+      jwt as unknown as JwtService,
       crypto as unknown as CryptoService,
       logger as unknown as LoggerService,
       metrics as unknown as SecurityMetricsService,
@@ -317,7 +317,7 @@ describe('AuthService.verifySolanaSignature', () => {
     } as any;
 
     service = new AuthService(
-      jwt as JwtService,
+      jwt as unknown as JwtService,
       crypto as unknown as CryptoService,
       logger as unknown as LoggerService,
       metrics as unknown as SecurityMetricsService,

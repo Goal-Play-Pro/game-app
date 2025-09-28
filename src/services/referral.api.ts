@@ -12,8 +12,8 @@ export class ReferralApiService {
       isActive: true,
       totalReferrals: 0,
       totalCommissions: '0.00',
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
   }
 
@@ -27,8 +27,8 @@ export class ReferralApiService {
       isActive: true,
       totalReferrals: 0,
       totalCommissions: '0.00',
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
   }
 
