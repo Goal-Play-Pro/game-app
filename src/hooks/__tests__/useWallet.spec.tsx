@@ -20,15 +20,10 @@ jest.mock('../../services/api', () => {
 });
 
 import { clearPreferredProvider } from '../../utils/providerRegistry';
+import { installMockProvider, restoreWindow } from '../../test-utils/walletMocks';
 import { enforceWalletRequestGuards, useWallet } from '../useWallet';
-
-type Eip1193Provider = {
-  request: jest.Mock;
-  on?: jest.Mock;
-  removeListener?: jest.Mock;
-  isMetaMask?: boolean;
-  isSafePal?: boolean;
-};
+import type { WalletWindow } from '../../types/wallet';
+import { setWindowProvider, clearWindowProvider } from '../../types/wallet';
 
 const METAMASK_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 const SAFEPAL_ADDRESS = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
@@ -54,7 +49,8 @@ class LocalStorageMock {
 }
 
 describe('useWallet', () => {
-  let originalWindow: any;
+  let originalWindow: Window | undefined;
+  let teardownProvider: (() => void) | null;
   let requestMock: jest.Mock;
   let queryClient: QueryClient;
 
@@ -79,8 +75,12 @@ describe('useWallet', () => {
 
   afterEach(() => {
     jest.resetAllMocks();
-    global.window = originalWindow;
+    restoreWindow(originalWindow);
     (global as any).localStorage = new LocalStorageMock();
+    if (teardownProvider) {
+      teardownProvider();
+      teardownProvider = null;
+    }
     clearPreferredProvider();
     if (queryClient) {
       queryClient.clear();
@@ -88,36 +88,33 @@ describe('useWallet', () => {
   });
 
   const setupProvider = (
-    overrides: Partial<Eip1193Provider> = {},
-    extraWindows: Record<string, unknown> = {},
+    overrides: Partial<Parameters<typeof installMockProvider>[0]> = {},
+    windowOverrides?: Partial<Pick<WalletWindow, 'ethereum' | 'safePal'>>,
     handler?: (method: string) => any,
   ) => {
-    const win = (originalWindow ?? global.window ?? {}) as any;
-    requestMock = jest.fn().mockImplementation(({ method }: { method: string }) => {
-      if (handler) {
-        return handler(method);
-      }
-      return Promise.reject(new Error(`Unexpected request ${method}`));
+    const { provider, requestMock: mock, setRequestHandler, clear } = installMockProvider({
+      ...overrides,
     });
 
-    const provider: Eip1193Provider = {
-      request: requestMock,
-      on: jest.fn(),
-      removeListener: jest.fn(),
-      ...overrides,
+    if (windowOverrides) {
+      Object.entries(windowOverrides).forEach(([key, value]) => {
+        setWindowProvider(key as 'ethereum' | 'safePal', value as WalletWindow['ethereum']);
+      });
+    }
+
+    requestMock = mock;
+    teardownProvider = () => {
+      clear();
+      if (windowOverrides) {
+        Object.keys(windowOverrides).forEach((key) => {
+          clearWindowProvider(key as 'ethereum' | 'safePal');
+        });
+      }
     };
 
-    if ('safePal' in win) {
-      delete win.safePal;
+    if (handler) {
+      setRequestHandler(({ method }) => handler(method));
     }
-    Object.assign(win, extraWindows);
-    if (provider.isSafePal) {
-      win.safePal = provider;
-    } else if (extraWindows.safePal) {
-      win.safePal = extraWindows.safePal;
-    }
-    win.ethereum = provider;
-    global.window = win;
 
     return provider;
   };
@@ -132,7 +129,7 @@ describe('useWallet', () => {
   it('deduplicates concurrent connect attempts', async () => {
     setupProvider(
       { isMetaMask: true },
-      {},
+      undefined,
       (method) => {
         if (method === 'eth_requestAccounts') {
           return Promise.resolve([METAMASK_ADDRESS]);
@@ -168,7 +165,7 @@ describe('useWallet', () => {
   it('flags unsupported chain when connecting on a non-BSC network', async () => {
     setupProvider(
       { isMetaMask: true },
-      {},
+      undefined,
       (method) => {
         if (method === 'eth_requestAccounts') {
           return Promise.resolve([METAMASK_ADDRESS]);
@@ -206,7 +203,7 @@ describe('useWallet', () => {
   it('detects SafePal provider and persists wallet type', async () => {
     setupProvider(
       { isSafePal: true },
-      {},
+      undefined,
       (method) => {
         if (method === 'eth_requestAccounts') {
           return Promise.resolve([SAFEPAL_ADDRESS]);
@@ -241,7 +238,7 @@ describe('useWallet', () => {
     // First render with MetaMask
     setupProvider(
       { isMetaMask: true },
-      {},
+      undefined,
       (method) => {
         if (method === 'eth_requestAccounts') {
           return Promise.resolve([METAMASK_ADDRESS]);
@@ -271,7 +268,7 @@ describe('useWallet', () => {
     // Initialize hook with persisted state and SafePal available
     setupProvider(
       { isSafePal: true },
-      {},
+      undefined,
       (method) => {
         if (method === 'eth_accounts') {
           return Promise.resolve([SAFEPAL_ADDRESS]);
@@ -305,7 +302,7 @@ describe('useWallet', () => {
 
     const provider = setupProvider(
       { isMetaMask: true },
-      {},
+      undefined,
       (method) => {
         if (method === 'eth_requestAccounts') {
           return Promise.resolve([METAMASK_ADDRESS]);
@@ -317,14 +314,20 @@ describe('useWallet', () => {
       },
     );
 
-    provider.on = jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    provider.on.mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
       if (event === 'disconnect') {
         disconnectHandlers.push(handler);
       }
-      return provider;
     });
 
-    provider.removeListener = jest.fn();
+    provider.removeListener.mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
+      if (event === 'disconnect') {
+        const index = disconnectHandlers.indexOf(handler);
+        if (index >= 0) {
+          disconnectHandlers.splice(index, 1);
+        }
+      }
+    });
 
     queryClient = new QueryClient();
     const { result } = renderHook(() => useWallet(), { wrapper: Wrapper });

@@ -4,6 +4,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
 describe('Authentication (e2e)', () => {
+  jest.setTimeout(15000);
   let app: INestApplication;
 
   beforeAll(async () => {

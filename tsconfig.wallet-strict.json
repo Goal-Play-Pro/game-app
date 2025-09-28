@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["vite/client", "jest"],
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src/hooks/useWallet.ts",
+    "src/hooks/__tests__/useWallet.spec.tsx",
+    "src/utils/providerRegistry.ts",
+    "src/utils/walletErrors.ts",
+    "src/types/wallet.ts"
+  ],
+  "exclude": []
+}

@@ -571,14 +571,26 @@ export const useWallet = () => {
       resetToDisconnected(normalized.message, normalized.code);
     };
 
-    provider.on?.('accountsChanged', handleAccountsChanged);
-    provider.on?.('chainChanged', handleChainChanged);
-    provider.on?.('disconnect', handleDisconnect as (event: unknown) => void);
+    const accountsChangedListener = (accounts: string[]) => {
+      void handleAccountsChanged(accounts);
+    };
+
+    const chainChangedListener = (chainIdHex: string) => {
+      handleChainChanged(chainIdHex);
+    };
+
+    const disconnectListener = (event?: Eip1193DisconnectEvent) => {
+      handleDisconnect(event ?? { code: 4900, message: 'Provider disconnected.' });
+    };
+
+    provider.on?.('accountsChanged', accountsChangedListener);
+    provider.on?.('chainChanged', chainChangedListener);
+    provider.on?.('disconnect', disconnectListener);
 
     return () => {
-      provider.removeListener?.('accountsChanged', handleAccountsChanged);
-      provider.removeListener?.('chainChanged', handleChainChanged);
-      provider.removeListener?.('disconnect', handleDisconnect as (event: unknown) => void);
+      provider.removeListener?.('accountsChanged', accountsChangedListener);
+      provider.removeListener?.('chainChanged', chainChangedListener);
+      provider.removeListener?.('disconnect', disconnectListener);
     };
   }, [deriveWalletType, disconnectWallet, getProvider, requestWithGuards, resetToDisconnected, walletState.chainId, walletState.isConnected]);
 

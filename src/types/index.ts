@@ -220,6 +220,11 @@ export enum OrderStatus {
   EXPIRED = 'expired',
 }
 
+export enum TransactionType {
+  CREDIT = 'credit',
+  DEBIT = 'debit',
+}
+
 export enum SessionType {
   SINGLE_PLAYER = 'single_player',
   MULTIPLAYER = 'multiplayer',

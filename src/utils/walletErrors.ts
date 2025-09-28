@@ -8,6 +8,10 @@ interface WalletErrorOptions {
   readonly cause?: unknown;
 }
 
+interface WalletErrorOptions {
+  readonly cause?: unknown;
+}
+
 const USER_REJECTION_CODES = new Set([4001, 5000]);
 const USER_REJECTION_PATTERNS = [
   /user rejected/i,
@@ -42,6 +46,15 @@ const METHOD_FALLBACKS: Record<string, { code: number; message: string }> = {
   },
 };
 
+const WALLET_ERROR_MESSAGES: Record<number, string> = {
+  4001: 'You rejected the request in your wallet. Approve it to continue.',
+  4005: 'The request was cancelled by your wallet.',
+  4900: 'Your wallet disconnected. Reconnect it and try again.',
+  4901: 'Switch to BNB Smart Chain (0x38) in your wallet to continue.',
+  4902: 'Add BNB Smart Chain to your wallet, then retry the action.',
+  5000: 'The request was cancelled by your wallet.',
+};
+
 const parseErrorCode = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -58,12 +71,16 @@ const parseErrorCode = (value: unknown): number | null => {
 export class WalletRpcError extends Error {
   readonly code: number;
   readonly data?: unknown;
+  readonly cause?: unknown;
 
   constructor(code: number, message: string, data?: unknown, options?: WalletErrorOptions) {
-    super(message, options);
+    super(message);
     this.name = 'WalletRpcError';
     this.code = code;
     this.data = data;
+    if (options?.cause !== undefined) {
+      this.cause = options.cause;
+    }
   }
 }
 
@@ -158,4 +175,24 @@ export const resolveMethodFallback = (method: string): { code: number; message: 
     code: -1,
     message: 'Unexpected wallet error occurred.',
   };
+};
+
+export const formatWalletErrorMessage = (
+  error: WalletRpcError,
+  fallbackMessage: string = 'Wallet request failed.',
+): string => {
+  if (!error) {
+    return fallbackMessage;
+  }
+
+  const knownMessage = WALLET_ERROR_MESSAGES[error.code];
+  if (knownMessage) {
+    return knownMessage;
+  }
+
+  if (error.message && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return fallbackMessage;
 };

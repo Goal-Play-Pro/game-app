@@ -353,17 +353,17 @@ export class RealPlayersService {
    * Obtiene jugadores disponibles para una división específica
    */
   static getPlayersForDivision(division: string): PlayerData[] {
-    const divisionMap = {
-      'primera': 'First',
-      'segunda': 'Second', 
-      'tercera': 'Third'
+    const divisionMap: Record<'primera' | 'segunda' | 'tercera', 'First' | 'Second' | 'Third'> = {
+      primera: 'First',
+      segunda: 'Second',
+      tercera: 'Third',
     };
-    
-    const targetDivision = divisionMap[division.toLowerCase()] || division;
-    
-    return REAL_PLAYERS_DATA.filter(player => 
-      player.divisions.includes(targetDivision)
-    );
+
+    const normalized = division.toLowerCase();
+    const isKnownDivision = (value: string): value is keyof typeof divisionMap => value in divisionMap;
+    const targetDivision = isKnownDivision(normalized) ? divisionMap[normalized] : division;
+
+    return REAL_PLAYERS_DATA.filter((player) => player.divisions.includes(targetDivision));
   }
 
   /**
@@ -373,12 +373,19 @@ export class RealPlayersService {
     const player = this.getPlayerByName(playerName);
     if (!player) return null;
 
-    const divisionKey = division.toLowerCase() === 'primera' ? 'first' :
-                       division.toLowerCase() === 'segunda' ? 'second' :
-                       division.toLowerCase() === 'tercera' ? 'third' : null;
+    const divisionKeyMap: Record<'primera' | 'segunda' | 'tercera', 'first' | 'second' | 'third'> = {
+      primera: 'first',
+      segunda: 'second',
+      tercera: 'third',
+    };
 
-    if (!divisionKey) return null;
+    const normalizedDivision = division.toLowerCase();
+    const isValidDivisionKey = (value: string): value is keyof typeof divisionKeyMap => value in divisionKeyMap;
+    if (!isValidDivisionKey(normalizedDivision)) {
+      return null;
+    }
 
+    const divisionKey = divisionKeyMap[normalizedDivision];
     return player.statsByDivision[divisionKey];
   }
 
@@ -489,31 +496,36 @@ export class RealPlayersService {
    * Obtiene el peso de probabilidad por rareza
    */
   private static getRarityWeight(rarity: string): number {
-    const weights = {
-      'legendary': 1,    // 1% chance
-      'epic': 5,         // 5% chance  
-      'rare': 15,        // 15% chance
-      'uncommon': 30,    // 30% chance
-      'common': 49       // 49% chance
+    const weights: Record<'legendary' | 'epic' | 'rare' | 'uncommon' | 'common', number> = {
+      legendary: 1,
+      epic: 5,
+      rare: 15,
+      uncommon: 30,
+      common: 49,
     };
 
-    return weights[rarity.toLowerCase()] || 25;
+    const normalized = rarity.toLowerCase();
+    if (normalized in weights) {
+      return weights[normalized as keyof typeof weights];
+    }
+
+    return 25;
   }
 
   /**
    * Convierte división string a formato interno
    */
   static normalizeDivision(division: string): string {
-    const divisionMap = {
-      'First': 'primera',
-      'Second': 'segunda',
-      'Third': 'tercera',
-      'first': 'primera',
-      'second': 'segunda', 
-      'third': 'tercera'
+    const divisionMap: Record<'first' | 'second' | 'third', 'primera' | 'segunda' | 'tercera'> = {
+      first: 'primera',
+      second: 'segunda',
+      third: 'tercera',
     };
 
-    return divisionMap[division] || division.toLowerCase();
+    const normalized = division.toLowerCase();
+    const isInternalDivision = (value: string): value is keyof typeof divisionMap => value in divisionMap;
+
+    return isInternalDivision(normalized) ? divisionMap[normalized] : normalized;
   }
 
   /**

@@ -1,12 +1,10 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import { API_CONFIG, getApiUrl, getDefaultRequestHeaders } from '../config/api.config';
+import { API_CONFIG, getDefaultRequestHeaders } from '../config/api.config';
 import {
-  User,
   Wallet,
   Product,
   ProductVariant,
   Order,
-  GachaPlayer,
   OwnedPlayer,
   PlayerKit,
   PenaltySession,
@@ -15,7 +13,9 @@ import {
   ChainType,
   SessionType,
   PenaltyDirection,
-  PlayerStats
+  PlayerStats,
+  ProductType,
+  Division,
 } from '../types';
 import { REAL_PLAYERS_DATA } from '../data/players.data';
 import { ReferralStatsDto, ReferralCodeDto } from '../types/referral';
@@ -199,10 +199,6 @@ const makeRequest = async <T = any>(
 };
 
 // Función auxiliar para esperar
-const delay = (ms: number): Promise<void> => {
-  return new Promise(resolve => setTimeout(resolve, ms));
-};
-
 // Datos de fallback para cuando el backend no esté disponible
 const getFallbackData = (endpoint: string, method: string, data?: any): any => {
   if (!API_CONFIG.ALLOW_FALLBACKS) {
@@ -345,7 +341,7 @@ const getFallbackData = (endpoint: string, method: string, data?: any): any => {
             currentRound: 1,
             maxRounds: 5,
             hostUserId: 'mock-user',
-            createdAt: new Date().toISOString()
+            createdAt: new Date(),
           };
         }
         return [{
@@ -357,7 +353,7 @@ const getFallbackData = (endpoint: string, method: string, data?: any): any => {
           guestScore: 0,
           currentRound: 1,
           maxRounds: 5,
-          createdAt: new Date().toISOString()
+          createdAt: new Date(),
         }];
       }
       
@@ -407,6 +403,80 @@ const getFallbackData = (endpoint: string, method: string, data?: any): any => {
 };
 
 // Datos de fallback
+const createTimestamp = () => new Date();
+
+const FALLBACK_PRODUCTS: Product[] = [
+  {
+    id: 'product-tercera',
+    name: 'Pack Tercera División',
+    description: 'Comienza tu aventura con jugadores básicos',
+    type: ProductType.CHARACTER_PACK,
+    isActive: true,
+    createdAt: createTimestamp(),
+    updatedAt: createTimestamp(),
+  },
+  {
+    id: 'product-segunda',
+    name: 'Pack Segunda División',
+    description: 'Jugadores intermedios con mejores estadísticas',
+    type: ProductType.CHARACTER_PACK,
+    isActive: true,
+    createdAt: createTimestamp(),
+    updatedAt: createTimestamp(),
+  },
+  {
+    id: 'product-primera',
+    name: 'Pack Primera División',
+    description: 'Jugadores de élite para gamers profesionales',
+    type: ProductType.CHARACTER_PACK,
+    isActive: true,
+    createdAt: createTimestamp(),
+    updatedAt: createTimestamp(),
+  },
+];
+
+const FALLBACK_VARIANTS: ProductVariant[] = [
+  {
+    id: 'variant-tercera-1',
+    productId: 'product-tercera',
+    name: 'Pack Tercera División - Nivel 1',
+    description: 'Pack básico de tercera división',
+    division: Division.TERCERA,
+    level: 1,
+    priceUSDT: '30.00',
+    isActive: true,
+    gachaPoolId: 'pool_tercera',
+    createdAt: createTimestamp(),
+    updatedAt: createTimestamp(),
+  },
+  {
+    id: 'variant-segunda-1',
+    productId: 'product-segunda',
+    name: 'Pack Segunda División - Nivel 1',
+    description: 'Pack intermedio de segunda división',
+    division: Division.SEGUNDA,
+    level: 1,
+    priceUSDT: '200.00',
+    isActive: true,
+    gachaPoolId: 'pool_segunda',
+    createdAt: createTimestamp(),
+    updatedAt: createTimestamp(),
+  },
+  {
+    id: 'variant-primera-1',
+    productId: 'product-primera',
+    name: 'Pack Primera División - Nivel 1',
+    description: 'Pack élite de primera división',
+    division: Division.PRIMERA,
+    level: 1,
+    priceUSDT: '1000.00',
+    isActive: true,
+    gachaPoolId: 'pool_primera',
+    createdAt: createTimestamp(),
+    updatedAt: createTimestamp(),
+  },
+];
+
 const FALLBACK_DATA = {
   gameStats: {
     totalUsers: 7542,
@@ -422,71 +492,17 @@ const FALLBACK_DATA = {
     totalGames: Math.floor(Math.random() * 200) + 50,
     winRate: ((Math.random() * 0.4) + 0.6) * 100,
     rewards: (Math.random() * 10000 + 1000).toFixed(2)
-  })),
-  products: [
-    {
-      id: 'product-tercera',
-      name: 'Pack Tercera División',
-      description: 'Comienza tu aventura con jugadores básicos',
-      type: 'character_pack',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: 'product-segunda',
-      name: 'Pack Segunda División',
-      description: 'Jugadores intermedios con mejores estadísticas',
-      type: 'character_pack',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: 'product-primera',
-      name: 'Pack Primera División',
-      description: 'Jugadores de élite para gamers profesionales',
-      type: 'character_pack',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ],
-  variants: [
-    {
-      id: 'variant-tercera-1',
-      productId: 'product-tercera',
-      name: 'Pack Tercera División - Nivel 1',
-      description: 'Pack básico de tercera división',
-      division: 'tercera',
-      level: 1,
-      priceUSDT: '30.00',
-      isActive: true,
-      gachaPoolId: 'pool_tercera'
-    },
-    {
-      id: 'variant-segunda-1',
-      productId: 'product-segunda',
-      name: 'Pack Segunda División - Nivel 1',
-      description: 'Pack intermedio de segunda división',
-      division: 'segunda',
-      level: 1,
-      priceUSDT: '200.00',
-      isActive: true,
-      gachaPoolId: 'pool_segunda'
-    },
-    {
-      id: 'variant-primera-1',
-      productId: 'product-primera',
-      name: 'Pack Primera División - Nivel 1',
-      description: 'Pack élite de primera división',
-      division: 'primera',
-      level: 1,
-      priceUSDT: '1000.00',
-      isActive: true,
-      gachaPoolId: 'pool_primera'
-    }
-  ],
+  })) as Array<{
+    rank: number;
+    userId: string;
+    username: string;
+    wins: number;
+    totalGames: number;
+    winRate: number;
+    rewards: string;
+  }>,
+  products: FALLBACK_PRODUCTS,
+  variants: FALLBACK_VARIANTS,
   orders: [],
   ownedPlayers: [],
   sessions: [],

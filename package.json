@@ -28,7 +28,8 @@
     "compile": "hardhat compile",
     "deploy:bsc": "hardhat run scripts/deploy-bsc.js --network bsc",
     "deploy:testnet": "hardhat run scripts/deploy-bsc.js --network bscTestnet",
-    "verify:bsc": "hardhat verify --network bsc"
+    "verify:bsc": "hardhat verify --network bsc",
+    "wallet:strict": "tsc -p tsconfig.wallet-strict.json --noEmit"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

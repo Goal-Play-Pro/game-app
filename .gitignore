@@ -51,6 +51,8 @@ lerna-debug.log*
 /tmp
 
 # dev db
+# Ignore root-level data but keep source data helpers
 data/
+!src/data/
 
 pnpm-workspace.yaml

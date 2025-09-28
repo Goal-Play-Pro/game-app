@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PaymentService } from '../services/payment.service';
 import ApiService from '../services/api';
 import { getStoredWalletAddress } from '../utils/walletStorage';
+import { normalizeWalletError, formatWalletErrorMessage } from '../utils/walletErrors';
 
 type PaymentProgressStatus = 'idle' | 'processing' | 'confirming' | 'completed';
 
@@ -101,12 +102,20 @@ export const usePayment = () => {
       queryClient.invalidateQueries({ queryKey: ['market-data'] });
       queryClient.invalidateQueries({ queryKey: ['global-statistics'] });
     },
-    onError: (error: any) => {
-      console.error('❌ Error en pago:', error);
+    onError: (error: unknown) => {
+      const normalizedError = normalizeWalletError(
+        error,
+        -1,
+        'Payment failed. Please approve the request in your wallet.',
+      );
+      console.error('❌ Error en pago:', normalizedError);
       setPaymentState(prev => ({
         ...prev,
         isProcessing: false,
-        error: error.message,
+        error: formatWalletErrorMessage(
+          normalizedError,
+          'Payment failed. Please approve the request in your wallet.',
+        ),
         transactionHash: null,
         approvalTransactionHash: null,
         needsApproval: false,
@@ -137,13 +146,21 @@ export const usePayment = () => {
       });
 
       return result;
-    } catch (error: any) {
-      console.error('Error initiating payment:', error);
+    } catch (error: unknown) {
+      const normalizedError = normalizeWalletError(
+        error,
+        -1,
+        'Unable to complete the payment request.',
+      );
+      console.error('Error initiating payment:', normalizedError);
       setPaymentState(prev => ({
         ...prev,
-        error: error.message,
+        error: formatWalletErrorMessage(
+          normalizedError,
+          'Unable to complete the payment request.',
+        ),
       }));
-      throw error;
+      throw normalizedError;
     }
   };
 

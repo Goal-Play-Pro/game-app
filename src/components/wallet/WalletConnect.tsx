@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, AlertCircle, Shield } from 'lucide-react';
 import { useWallet } from '../../hooks/useWallet';
@@ -11,6 +11,8 @@ interface WalletConnectProps {
 
 const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: WalletConnectProps) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [switchErrorMessage, setSwitchErrorMessage] = useState<string | null>(null);
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
   const {
     isConnected,
     address,
@@ -128,14 +130,63 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
     }
   };
 
-  const handleSwitchToBSC = async () => {
+  const handleSwitchToBSC = useCallback(async () => {
+    if (!switchToNetwork) {
+      return;
+    }
+
+    setSwitchErrorMessage(null);
+    setIsSwitchingNetwork(true);
     try {
       await switchToNetwork(56);
       setIsDropdownOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error switching to BSC:', error);
+      const message = error?.message || 'Failed to switch network. Please approve the request in your wallet.';
+      setSwitchErrorMessage(message);
+    } finally {
+      setIsSwitchingNetwork(false);
     }
-  };
+  }, [switchToNetwork]);
+
+  const unsupportedNetworkBanner = useMemo(() => {
+    if (!isConnected || chainId === 56) {
+      return null;
+    }
+
+    const message = error && error.toLowerCase().includes('bnb smart chain')
+      ? error
+      : 'Switch to BNB Smart Chain (0x38) in MetaMask to continue.';
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3 bg-yellow-500/20 border border-yellow-500/40 rounded-lg"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center space-x-2 text-yellow-200 text-sm">
+            <AlertCircle className="w-4 h-4" />
+            <span>{message}</span>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 gap-2">
+            {switchErrorMessage && (
+              <span className="text-xs text-red-300 sm:text-right">
+                {switchErrorMessage}
+              </span>
+            )}
+            <button
+              onClick={handleSwitchToBSC}
+              className="btn-primary px-4 py-2 text-xs sm:text-sm"
+              disabled={isSwitchingNetwork}
+            >
+              {isSwitchingNetwork ? 'Pending Approval...' : 'Switch to BSC'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }, [chainId, error, handleSwitchToBSC, isConnected, isSwitchingNetwork, switchErrorMessage]);
 
   if (!isConnected) {
     return (
@@ -250,6 +301,8 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
         <span className="font-mono">{formatAddress(address!)}</span>
         {showDropdown && <ChevronDown className={`${iconSizes[size]} transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />}
       </motion.button>
+
+      {unsupportedNetworkBanner}
 
       {/* Dropdown Menu */}
       {showDropdown && isDropdownOpen && (
