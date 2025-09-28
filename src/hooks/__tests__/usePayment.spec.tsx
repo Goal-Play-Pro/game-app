@@ -78,7 +78,7 @@ describe('usePayment', () => {
   });
 
   const persistWallet = () => {
-    persistWalletState(56, '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266', 'metamask');
+    persistWalletState(56, '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266', 'metamask', false);
   };
 
   it('does not trigger processOrderPayment until initiatePayment is called', () => {

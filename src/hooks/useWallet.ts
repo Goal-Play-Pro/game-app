@@ -97,27 +97,27 @@ export const useWallet = () => {
   const providerRef = useRef<Eip1193Provider | null>(null);
   const walletStateRef = useRef<WalletState | null>(null);
   const isConnectingRef = useRef(false);
+  const initialStoredWallet = getStoredWallet();
   const isAuthenticatingRef = useRef(false);
   const [walletState, setWalletState] = useState<WalletState>(() => {
-    const stored = getStoredWallet();
     return {
-      isConnected: stored.isConnected,
-      address: stored.address,
-      caip10Address: stored.caip10,
-      chainId: stored.chainId,
-      chainType: stored.chainId ? getChainType(stored.chainId) : null,
+      isConnected: initialStoredWallet.isConnected,
+      address: initialStoredWallet.address,
+      caip10Address: initialStoredWallet.caip10,
+      chainId: initialStoredWallet.chainId,
+      chainType: initialStoredWallet.chainId ? getChainType(initialStoredWallet.chainId) : null,
       isConnecting: false,
       isAuthenticating: false,
-      needsAuth: stored.isConnected,
+      needsAuth: initialStoredWallet.needsAuth,
       error: null,
       isFrameBlocked: false,
-      walletType: normalizeWalletType(stored.walletType),
+      walletType: normalizeWalletType(initialStoredWallet.walletType),
     };
   });
 
   walletStateRef.current = walletState;
 
-  const hasRequestedAccountsRef = useRef(false);
+  const hasRequestedAccountsRef = useRef(initialStoredWallet.isConnected);
 
   const resolveWindowProvider = useCallback((): Eip1193Provider | null => {
     if (typeof window === 'undefined') {
@@ -271,7 +271,7 @@ export const useWallet = () => {
       const chainIdHex: string = await requestWithGuards(provider, { method: 'eth_chainId' });
       const chainIdNumber = Number.parseInt(chainIdHex, 16);
 
-      persistWallet(chainIdNumber, accounts[0], normalizedType ?? undefined);
+      persistWallet(chainIdNumber, accounts[0], normalizedType ?? undefined, true);
       setWalletState((prev) => ({
         isConnected: true,
         address: accounts[0],
@@ -319,7 +319,7 @@ export const useWallet = () => {
 
     try {
       await authenticateWallet(walletState.address, walletState.chainId);
-      persistWallet(walletState.chainId, walletState.address, walletState.walletType ?? undefined);
+      persistWallet(walletState.chainId, walletState.address, walletState.walletType ?? undefined, false);
       setWalletState((prev) => ({
         ...prev,
         isAuthenticating: false,
@@ -329,6 +329,14 @@ export const useWallet = () => {
       }));
     } catch (error: any) {
       console.error('❌ Wallet authentication failed:', error);
+      if (walletState.chainId && walletState.address) {
+        persistWallet(
+          walletState.chainId,
+          walletState.address,
+          walletState.walletType ?? undefined,
+          true,
+        );
+      }
       setWalletState((prev) => ({
         ...prev,
         isAuthenticating: false,
@@ -400,7 +408,7 @@ export const useWallet = () => {
       const nextType = deriveWalletType(provider);
       const normalizedType = nextType === 'unknown' ? null : nextType;
 
-      persistWallet(chainIdNumber, accounts[0], normalizedType ?? undefined);
+      persistWallet(chainIdNumber, accounts[0], normalizedType ?? undefined, true);
       setWalletState((prev) => ({
         ...prev,
         address: accounts[0],

@@ -25,10 +25,9 @@ import WalletManager from '../components/wallet/WalletManager';
 import EditProfileModal from '../components/profile/EditProfileModal';
 import { CompleteUserProfile } from '../services/api';
 import { useAuthStatus } from '../hooks/useAuthStatus';
+import { useWallet } from '../hooks/useWallet';
 
-import { shareContent, showCopyNotification } from '../utils/share.utils';
-import { logWalletRequirement } from '../utils/wallet.utils';
-import { getStoredWallet } from '../utils/walletStorage';
+import { shareContent } from '../utils/share.utils';
 
 const ProfilePage = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'stats' | 'referrals' | 'wallets' | 'history' | 'settings'>(() => {
@@ -41,41 +40,46 @@ const ProfilePage = () => {
   const isAuthenticated = useAuthStatus();
   const queryClient = useQueryClient();
 
-  // Get real user wallet address
-  const storedWallet = getStoredWallet();
-  const connectedWalletAddress = storedWallet.address;
-  const connectedWalletCaip10 = storedWallet.caip10;
-  const isWalletConnected = storedWallet.isConnected;
+  const {
+    isConnected,
+    needsAuth,
+    isConnecting,
+    isAuthenticating,
+    connectWallet,
+    signInWallet,
+    address,
+    caip10Address,
+  } = useWallet();
+
+  const [currentUser, setCurrentUser] = useState({
+    id: '',
+    username: '',
+    displayName: '',
+    avatar: '',
+    banner: '',
+    bio: '',
+    walletAddress: address ?? '',
+    walletAddressCaip10: caip10Address ?? null,
+    isVerified: false,
+    joinedAt: '',
+    level: 1,
+    experience: 0,
+    nextLevelXP: 1,
+  });
+
+  const [profileData, setProfileData] = useState({
+    displayName: '',
+    bio: '',
+    avatar: '',
+  });
 
   useEffect(() => {
-    if (!isWalletConnected || !connectedWalletAddress) {
-      logWalletRequirement('Profile page');
-    }
-  }, [isWalletConnected, connectedWalletAddress]);
-
-  // Mock user data - in real app this would come from auth context
-  const [currentUser, setCurrentUser] = useState({
-    id: '1',
-    username: 'golplayer',
-    displayName: 'Goal Player',
-    avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=300',
-    banner: 'https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg?auto=compress&cs=tinysrgb&w=1200',
-    bio: 'Passionate football gamer and NFT collector. Master of penalty shootouts.',
-    walletAddress: connectedWalletAddress || '0x742d35Cc6635C0532925a3b8D34C83dD3e0Be000',
-    walletAddressCaip10: connectedWalletCaip10,
-    isVerified: true,
-    joinedAt: '2024-01-15',
-    level: 25,
-    experience: 15420,
-    nextLevelXP: 20000,
-  });
-
-  // State for profile updates
-  const [profileData, setProfileData] = useState({
-    displayName: currentUser.displayName,
-    bio: currentUser.bio,
-    avatar: currentUser.avatar,
-  });
+    setCurrentUser((prev) => ({
+      ...prev,
+      walletAddress: address ?? '',
+      walletAddressCaip10: caip10Address ?? prev.walletAddressCaip10,
+    }));
+  }, [address, caip10Address]);
 
   // Fetch comprehensive user data
   const { data: userProfile, isLoading: profileLoading } = useQuery({
@@ -84,7 +88,7 @@ const ProfilePage = () => {
       console.log('👤 Loading user profile from production API...');
       return ApiService.getUserProfile();
     },
-    enabled: isWalletConnected && !!connectedWalletAddress,
+    enabled: isAuthenticated,
     retry: 2,
     retryDelay: 1000,
   });
@@ -110,20 +114,32 @@ const ProfilePage = () => {
     if (userProfile) {
       console.log('📝 Updating profile data from production API:', userProfile);
       setProfileData({
-        displayName: userProfile.displayName || currentUser.displayName,
-        bio: userProfile.bio || currentUser.bio,
-        avatar: userProfile.avatar || currentUser.avatar,
+        displayName: userProfile.displayName ?? '',
+        bio: userProfile.bio ?? '',
+        avatar: userProfile.avatar ?? '',
       });
       
       // Update current user with real data
       setCurrentUser(prev => ({
         ...prev,
-        displayName: userProfile.displayName || prev.displayName,
-        bio: userProfile.bio || prev.bio,
-        avatar: userProfile.avatar || prev.avatar,
+        username: userProfile.username ?? prev.username,
+        displayName: userProfile.displayName ?? prev.displayName,
+        bio: userProfile.bio ?? prev.bio,
+        avatar: userProfile.avatar ?? prev.avatar,
+        banner: userProfile.banner ?? prev.banner,
+        walletAddress: userProfile.walletAddress ?? address ?? prev.walletAddress,
+        walletAddressCaip10: userProfile.walletAddressCaip10 ?? prev.walletAddressCaip10,
+        isVerified: userProfile.isVerified ?? prev.isVerified,
+        joinedAt: userProfile.joinedAt ?? prev.joinedAt,
+        level: typeof userProfile.level === 'number' ? userProfile.level : prev.level,
+        experience: typeof userProfile.experience === 'number' ? userProfile.experience : prev.experience,
+        nextLevelXP:
+          typeof userProfile.nextLevelXP === 'number' && userProfile.nextLevelXP > 0
+            ? userProfile.nextLevelXP
+            : prev.nextLevelXP,
       }));
     }
-  }, [userProfile]);
+  }, [userProfile, address]);
 
   const { data: completeProfile, isLoading: completeProfileLoading } = useQuery<CompleteUserProfile>({
     queryKey: ['complete-user-profile'],
@@ -166,14 +182,14 @@ const ProfilePage = () => {
   // Create referral code mutation
   const createReferralCodeMutation = useMutation({
     mutationFn: async (customCode?: string) => {
-      console.log('🚀 Creating referral code via production API for wallet:', connectedWalletAddress);
+      console.log('🚀 Creating referral code via production API for wallet:', address);
       
-      if (!connectedWalletAddress) {
+      if (!address) {
         throw new Error('No wallet connected. Please connect your wallet first.');
       }
       
       // Generate code based on wallet address
-      const walletBasedCode = customCode || (connectedWalletAddress.slice(2, 8).toUpperCase() + 
+      const walletBasedCode = customCode || (address.slice(2, 8).toUpperCase() + 
         Math.random().toString(36).substring(2, 5).toUpperCase());
       
       return await ApiService.createReferralCode(walletBasedCode);
@@ -183,7 +199,7 @@ const ProfilePage = () => {
       queryClient.invalidateQueries({ queryKey: ['my-referral-code'] });
       queryClient.invalidateQueries({ queryKey: ['referral-stats'] });
       const referralBaseUrl = API_CONFIG.FRONTEND_URL;
-      alert(`✅ ¡Código creado exitosamente!\n\nWallet: ${connectedWalletAddress?.slice(0, 6)}...${connectedWalletAddress?.slice(-4)}\nTu código: ${data.code}\nTu link: ${referralBaseUrl}?ref=${data.code}\n\n¡Compártelo y gana 5% de cada compra!`);
+      alert(`✅ ¡Código creado exitosamente!\n\nWallet: ${address?.slice(0, 6)}...${address?.slice(-4)}\nTu código: ${data.code}\nTu link: ${referralBaseUrl}?ref=${data.code}\n\n¡Compártelo y gana 5% de cada compra!`);
     },
     onError: (error) => {
       console.error('❌ Error creating referral code via production API:', error);
@@ -192,13 +208,18 @@ const ProfilePage = () => {
   });
 
   const handleCreateReferralCode = () => {
-    console.log('🎯 User clicked create referral code button for wallet:', connectedWalletAddress);
+    console.log('🎯 User clicked create referral code button for wallet:', address);
     
-    if (!isWalletConnected || !connectedWalletAddress) {
+    if (!isConnected || !address) {
       alert('❌ Por favor conecta tu wallet primero para crear tu código de referido.');
       return;
     }
-    
+
+    if (!isAuthenticated) {
+      alert('❌ Firma tu sesión antes de crear un código de referido.');
+      return;
+    }
+
     createReferralCodeMutation.mutate(undefined);
   };
 
@@ -210,6 +231,12 @@ const ProfilePage = () => {
     { id: 'history', label: 'History', icon: Calendar },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
+
+  const walletAddressDisplay = currentUser.walletAddress || address || '';
+  const walletDisplayShort = walletAddressDisplay
+    ? `${walletAddressDisplay.slice(0, 6)}...${walletAddressDisplay.slice(-4)}`
+    : 'Sin dirección';
+  const bannerUrl = currentUser.banner || 'https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg?auto=compress&cs=tinysrgb&w=1200';
 
   const ownedPlayersList = Array.isArray(ownedPlayers) ? ownedPlayers : [];
   const userSessionsList = Array.isArray(userSessions) ? userSessions : [];
@@ -228,7 +255,10 @@ const ProfilePage = () => {
   };
 
   const copyAddress = () => {
-    navigator.clipboard.writeText(currentUser.walletAddress);
+    if (!walletAddressDisplay) {
+      return;
+    }
+    navigator.clipboard.writeText(walletAddressDisplay);
     // You could add a toast notification here
   };
 
@@ -251,19 +281,6 @@ const ProfilePage = () => {
     });
   };
 
-  const copyToClipboard = () => {
-    // Usar utilidad robusta de copia
-    shareContent({
-      title: `${currentUser.displayName} - Goal Play Profile`,
-      text: currentUser.bio,
-      url: window.location.href
-    }, {
-      showNotification: true,
-      notificationDuration: 3000,
-      fallbackToPrompt: true
-    });
-  };
-
   // Calculate stats
   const totalPlayers = ownedPlayersList.length;
   const totalGames = userSessionsList.length;
@@ -277,8 +294,11 @@ const ProfilePage = () => {
     ? completeProfile.totalSpent
     : totalSpentFromOrders;
   const normalizedTotalSpent = Number.isFinite(totalSpent) ? totalSpent : 0;
+  const experienceProgress = currentUser.nextLevelXP > 0
+    ? Math.min(100, (currentUser.experience / currentUser.nextLevelXP) * 100)
+    : 0;
 
-  if (!isWalletConnected || !connectedWalletAddress) {
+  if (!isConnected) {
     return (
       <div className="pt-24 pb-20 flex justify-center items-center min-h-screen">
         <div className="glass-dark rounded-xl p-10 text-center space-y-4 max-w-md">
@@ -287,14 +307,34 @@ const ProfilePage = () => {
           <p className="text-gray-400">
             Conecta tu wallet para ver tu perfil, órdenes y crear tu código de referido.
           </p>
-          <div className="mt-4 p-3 bg-blue-500/20 border border-blue-500/30 rounded-lg">
-            <p className="text-blue-400 text-sm">
-              🔍 Debug: Wallet conectada = {isWalletConnected ? 'true' : 'false'}
-            </p>
-            <p className="text-blue-400 text-xs mt-1">
-              Dirección: {connectedWalletAddress || 'No conectada'}
-            </p>
-          </div>
+          <button
+            onClick={connectWallet}
+            className="btn-primary mt-4"
+            disabled={isConnecting}
+          >
+            {isConnecting ? 'Conectando…' : 'Conectar Wallet'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || needsAuth) {
+    return (
+      <div className="pt-24 pb-20 flex justify-center items-center min-h-screen">
+        <div className="glass-dark rounded-xl p-10 text-center space-y-4 max-w-md">
+          <Users className="w-12 h-12 text-gray-500 mx-auto" />
+          <h2 className="text-2xl font-display text-white">Firma para continuar</h2>
+          <p className="text-gray-400">
+            Firma el mensaje seguro para activar tu sesión y acceder a tu perfil.
+          </p>
+          <button
+            onClick={signInWallet}
+            className="btn-primary mt-4"
+            disabled={isAuthenticating}
+          >
+            {isAuthenticating ? 'Esperando firma…' : 'Firmar y continuar'}
+          </button>
         </div>
       </div>
     );
@@ -305,7 +345,7 @@ const ProfilePage = () => {
       {/* Banner */}
       <div className="relative h-64 md:h-80 overflow-hidden">
         <img
-          src={currentUser.banner}
+          src={bannerUrl}
           alt="Profile Banner"
           className="w-full h-full object-cover"
         />
@@ -351,7 +391,7 @@ const ProfilePage = () => {
                   <div className="flex items-center space-x-2 mb-4">
                     <Wallet className="w-4 h-4 text-gray-400" />
                     <span className="text-sm text-gray-400">
-                      {currentUser.walletAddress.slice(0, 6)}...{currentUser.walletAddress.slice(-4)}
+                      {walletDisplayShort}
                     </span>
                     <button
                       onClick={copyAddress}
@@ -381,7 +421,7 @@ const ProfilePage = () => {
                     <div className="w-full bg-gray-700 rounded-full h-2">
                       <div 
                         className="bg-gradient-to-r from-football-green to-football-blue h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${(currentUser.experience / currentUser.nextLevelXP) * 100}%` }}
+                        style={{ width: `${experienceProgress}%` }}
                       />
                     </div>
                   </div>
@@ -827,7 +867,7 @@ const ProfilePage = () => {
                     </h3>
                     <div className="mb-4 p-3 glass rounded-lg">
                       <p className="text-football-green text-sm">
-                        📍 Tu Wallet: {connectedWalletAddress?.slice(0, 6)}...{connectedWalletAddress?.slice(-4)}
+                        📍 Tu Wallet: {walletAddressDisplay ? `${walletAddressDisplay.slice(0, 6)}...${walletAddressDisplay.slice(-4)}` : 'Sin dirección'}
                       </p>
                     </div>
                     <p className="text-gray-400 mb-6 max-w-md mx-auto">

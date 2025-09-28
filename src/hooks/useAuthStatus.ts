@@ -13,6 +13,18 @@ const isWalletConnected = (): boolean => {
   }
 };
 
+const walletNeedsAuth = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    return localStorage.getItem('walletNeedsAuth') === 'true';
+  } catch {
+    return false;
+  }
+};
+
 export const useAuthStatus = (): boolean => {
   const [authenticated, setAuthenticated] = useState(() => ApiService.isAuthenticated());
 
@@ -34,6 +46,7 @@ export const useAuthStatus = (): boolean => {
 
     const syncStatus = async (forceCheck = false) => {
       const walletConnected = isWalletConnected();
+      const needsAuth = walletNeedsAuth();
 
       if (!walletConnected && !ApiService.isAuthenticated()) {
         updateState(false);
@@ -44,15 +57,21 @@ export const useAuthStatus = (): boolean => {
         }
       }
 
+      if (needsAuth) {
+        updateState(false);
+        ApiService.markSessionActive(false);
+        return;
+      }
+
       const hasSession = ApiService.isAuthenticated() || (await ApiService.ensureSession());
       updateState(hasSession);
     };
 
-    const initialShouldCheck = ApiService.isAuthenticated() || isWalletConnected();
+    const initialShouldCheck = ApiService.isAuthenticated() || (isWalletConnected() && !walletNeedsAuth());
     syncStatus(initialShouldCheck);
 
     const interval = window.setInterval(() => {
-      if (!isWalletConnected() && !ApiService.isAuthenticated()) {
+      if ((!isWalletConnected() || walletNeedsAuth()) && !ApiService.isAuthenticated()) {
         return;
       }
       syncStatus();
