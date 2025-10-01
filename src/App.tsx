@@ -86,7 +86,7 @@ function App() {
       
       {/* Backend Status Indicator */}
       {backendStatus !== 'online' && (
-        <div className="fixed top-20 left-4 right-4 z-40 max-w-md mx-auto">
+        <div className="fixed top-24 left-4 right-4 z-30 max-w-md mx-auto">
           <div className={`glass-dark rounded-xl p-4 border ${
             backendStatus === 'checking' ? 'border-yellow-500/30' : 'border-red-500/30'
           } shadow-xl`}>
@@ -99,7 +99,7 @@ function App() {
                   {backendStatus === 'checking' ? 'Conectando a game.goalplay.pro...' : 'Sin conexión al servidor'}
                 </p>
                 <p className="text-gray-400 text-xs">
-                  {backendStatus === 'checking' 
+                  {backendStatus === 'checking'
                     ? 'Verificando https://game.goalplay.pro/api/health...'
                     : 'Reintentando cada 5 segundos. Funciones limitadas.'
                   }
