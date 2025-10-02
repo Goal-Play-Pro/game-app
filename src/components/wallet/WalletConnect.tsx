@@ -206,38 +206,42 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
   }, [chainId, error, handleSwitchToBSC, isConnected, isSwitchingNetwork, switchErrorMessage]);
 
   if (!isConnected) {
-    const handleConnectClick = (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      console.log('🔵 Connect button clicked', { isFrameBlocked, isConnecting, error });
+    const handleConnectClick = () => {
+      console.log('🔵🔵🔵 BUTTON CLICKED!!! 🔵🔵🔵');
+      console.log('State:', { isFrameBlocked, isConnecting, error });
 
       if (isFrameBlocked) {
-        console.log('🔴 Cannot connect: blocked by iframe');
+        console.log('🔴 Blocked by iframe');
+        alert('Cannot connect: This page is in an iframe. Open in a new tab.');
         return;
       }
 
       if (isConnecting) {
-        console.log('🔴 Cannot connect: already connecting');
+        console.log('🔴 Already connecting');
         return;
       }
 
-      console.log('🔵 Calling connectWallet...');
-      connectWallet();
+      console.log('✅ Calling connectWallet...');
+      try {
+        connectWallet();
+      } catch (err) {
+        console.error('❌ Error calling connectWallet:', err);
+      }
     };
 
-    // Only disable button when actually connecting, not for iframe
-    const isButtonDisabled = isConnecting;
-
     return (
-      <div className={`relative ${className}`}>
-        <motion.button
+      <div className={`relative ${className}`} style={{ pointerEvents: 'auto' }}>
+        <button
           type="button"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
           onClick={handleConnectClick}
-          disabled={isButtonDisabled}
+          disabled={isConnecting}
+          style={{
+            pointerEvents: 'auto',
+            position: 'relative',
+            zIndex: 10
+          }}
           className={`btn-primary flex items-center space-x-2 ${sizeClasses[size]} ${
-            isButtonDisabled ? 'opacity-70 cursor-wait' : isFrameBlocked ? 'opacity-60' : ''
+            isConnecting ? 'opacity-70 cursor-wait' : ''
           }`}
         >
           {isConnecting ? (
@@ -253,7 +257,7 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
               </span>
             </>
           )}
-        </motion.button>
+        </button>
 
         {(error || isFrameBlocked) && !isConnecting && (
           <motion.div
