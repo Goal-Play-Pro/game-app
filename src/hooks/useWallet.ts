@@ -391,13 +391,16 @@ export const useWallet = () => {
       return;
     }
 
+    // Clear previous errors before attempting new connection
+    setError(null);
+
     const provider = getProvider();
     const detectedType = provider ? deriveWalletType(provider) : detectWalletType();
     const normalizedType = detectedType === 'unknown' ? null : detectedType;
 
     if (!provider) {
       if (detectedType === 'unknown') {
-        setError('No compatible wallet detected. Please install a Web3 wallet (MetaMask, SafePal, TokenPocket, Bitget, Binance, or Trust Wallet).');
+        setError('No wallet detected. Please install MetaMask, SafePal, TokenPocket, Bitget, Binance Wallet, or Trust Wallet, then refresh and try again.');
       } else {
         const walletNames: { [key: string]: string } = {
           'safepal': 'SafePal',
@@ -408,7 +411,7 @@ export const useWallet = () => {
           'trust': 'Trust Wallet'
         };
         const name = walletNames[detectedType] || 'Wallet';
-        setError(`${name} is not available. Please reopen or reinstall the extension.`);
+        setError(`${name} detected but not responding. Please unlock your wallet, refresh the page, and try again.`);
       }
       return;
     }

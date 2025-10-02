@@ -209,11 +209,13 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
     return (
       <div className={`relative ${className}`}>
         <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={connectWallet}
+          whileHover={{ scale: isFrameBlocked ? 1 : 1.02 }}
+          whileTap={{ scale: isFrameBlocked ? 1 : 0.98 }}
+          onClick={isFrameBlocked ? undefined : connectWallet}
           disabled={isConnecting || isFrameBlocked}
-          className={`btn-primary flex items-center space-x-2 ${sizeClasses[size]} disabled:opacity-50 disabled:cursor-not-allowed`}
+          className={`btn-primary flex items-center space-x-2 ${sizeClasses[size]} ${
+            isFrameBlocked ? 'opacity-50 cursor-not-allowed' : isConnecting ? 'opacity-70' : ''
+          }`}
         >
           {isConnecting ? (
             <>
@@ -230,15 +232,36 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
           )}
         </motion.button>
 
-        {(error || isFrameBlocked) && (
+        {(error || isFrameBlocked) && !isConnecting && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute top-full left-0 right-0 mt-2 p-2 bg-red-500/20 border border-red-500/30 rounded-lg z-50 min-w-max"
+            className="absolute top-full left-0 right-0 mt-2 p-3 bg-red-500/20 border border-red-500/30 rounded-lg z-50 min-w-max max-w-sm"
           >
-            <div className="flex items-center space-x-2 text-red-400 text-xs whitespace-nowrap">
-              <AlertCircle className="w-3 h-3 flex-shrink-0" />
-              <span>{error || 'Wallet connections are disabled inside embedded frames'}</span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start space-x-2 text-red-400 text-xs">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold mb-1">
+                    {isFrameBlocked ? 'Connection Blocked' : 'Cannot Connect'}
+                  </p>
+                  <p className="text-red-300/90 leading-relaxed">
+                    {error || 'Wallet connections are disabled inside embedded frames'}
+                  </p>
+                  {isFrameBlocked ? (
+                    <p className="text-red-300/70 text-[10px] mt-1">
+                      Open this page in a new tab to connect your wallet
+                    </p>
+                  ) : (
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="mt-2 text-[10px] text-red-300 hover:text-red-200 underline"
+                    >
+                      Click here to refresh and retry
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
