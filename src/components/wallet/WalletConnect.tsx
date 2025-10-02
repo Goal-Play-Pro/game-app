@@ -33,7 +33,7 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
   } = useWallet();
 
   const sizeClasses = {
-    sm: 'text-xs px-3 py-2',
+    sm: 'text-xs px-2 py-1.5',
     md: 'text-sm px-4 py-3',
     lg: 'text-base px-6 py-4'
   };
@@ -162,27 +162,20 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 p-3 bg-yellow-500/20 border border-yellow-500/40 rounded-lg"
+        className="absolute top-full left-0 right-0 mt-2 p-2 bg-yellow-500/20 border border-yellow-500/40 rounded-lg z-50 max-w-xs"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center space-x-2 text-yellow-200 text-sm">
-            <AlertCircle className="w-4 h-4" />
-            <span>{message}</span>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start space-x-2 text-yellow-200 text-xs">
+            <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+            <span className="leading-tight">Wrong network</span>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 gap-2">
-            {switchErrorMessage && (
-              <span className="text-xs text-red-300 sm:text-right">
-                {switchErrorMessage}
-              </span>
-            )}
-            <button
-              onClick={handleSwitchToBSC}
-              className="btn-primary px-4 py-2 text-xs sm:text-sm"
-              disabled={isSwitchingNetwork}
-            >
-              {isSwitchingNetwork ? 'Pending Approval...' : 'Switch to BSC'}
-            </button>
-          </div>
+          <button
+            onClick={handleSwitchToBSC}
+            className="btn-primary px-3 py-1.5 text-xs w-full"
+            disabled={isSwitchingNetwork}
+          >
+            {isSwitchingNetwork ? 'Switching...' : 'Switch to BSC'}
+          </button>
         </div>
       </motion.div>
     );
@@ -213,25 +206,15 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
           )}
         </motion.button>
 
-        {availableWallets.length > 0 && (
-          <div className="mt-2 text-xs text-gray-400 text-center">
-            {availableWallets.length === 1 ? (
-              <span>{availableWallets[0].name} detected</span>
-            ) : (
-              <span>{availableWallets.map((wallet) => wallet.name).join(' & ')} available</span>
-            )}
-          </div>
-        )}
-
         {error && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-2 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-center"
+            className="absolute top-full left-0 right-0 mt-2 p-2 bg-red-500/20 border border-red-500/30 rounded-lg z-50 max-w-xs"
           >
-            <div className="flex items-center space-x-2 text-red-400 text-sm">
-              <AlertCircle className="w-4 h-4" />
-              <span>{error}</span>
+            <div className="flex items-center space-x-2 text-red-400 text-xs">
+              <AlertCircle className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">{error}</span>
             </div>
           </motion.div>
         )}
@@ -274,11 +257,11 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-center"
+            className="absolute top-full left-0 right-0 mt-2 p-2 bg-red-500/20 border border-red-500/30 rounded-lg z-50 max-w-xs"
           >
-            <div className="flex items-center space-x-2 text-red-400 text-sm">
-              <AlertCircle className="w-4 h-4" />
-              <span>{error}</span>
+            <div className="flex items-center space-x-2 text-red-400 text-xs">
+              <AlertCircle className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">{error}</span>
             </div>
           </motion.div>
         )}
@@ -310,7 +293,7 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
           initial={{ opacity: 0, y: 10, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 10, scale: 0.95 }}
-          className="absolute top-full right-0 mt-2 w-80 glass-dark rounded-xl border border-white/20 shadow-xl z-50"
+          className="absolute top-full right-0 mt-2 w-72 sm:w-80 glass-dark rounded-xl border border-white/20 shadow-xl z-[60] max-h-[80vh] overflow-y-auto"
           onMouseLeave={() => setIsDropdownOpen(false)}
         >
           <div className="p-4">

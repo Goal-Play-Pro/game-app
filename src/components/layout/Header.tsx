@@ -46,9 +46,9 @@ const Header = () => {
       <ReferralBanner />
       <header className="fixed top-0 left-0 right-0 z-50 glass-dark border-b border-white/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
+        <div className="flex items-center justify-between h-16 gap-2">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-3">
+          <Link to="/" className="flex items-center space-x-2 flex-shrink-0">
             <motion.div
               className="relative"
               whileHover={{ scale: 1.05 }}
@@ -57,7 +57,7 @@ const Header = () => {
               <img
                 src="/assets/goalplay-icon.png"
                 alt="Goal Play Logo"
-                className="h-8 sm:h-10 w-auto object-contain"
+                className="h-7 sm:h-8 w-auto object-contain"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
                   target.style.display = 'none';
@@ -65,29 +65,29 @@ const Header = () => {
                   if (fallback) fallback.style.display = 'flex';
                 }}
               />
-             <div className="hidden h-8 sm:h-10 w-8 sm:w-10 bg-gradient-to-r from-football-green to-football-blue rounded-lg items-center justify-center">
-               <span className="text-white font-bold text-sm sm:text-lg">G</span>
+             <div className="hidden h-7 sm:h-8 w-7 sm:w-8 bg-gradient-to-r from-football-green to-football-blue rounded-lg items-center justify-center">
+               <span className="text-white font-bold text-xs sm:text-base">G</span>
              </div>
             </motion.div>
-           <span className="font-display font-bold text-lg sm:text-xl gradient-text">
+           <span className="font-display font-bold text-base sm:text-lg gradient-text hidden sm:inline">
              Goal Play
            </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center space-x-3 xl:space-x-4">
+          <nav className="hidden lg:flex items-center space-x-1 xl:space-x-2 flex-1 justify-center overflow-x-auto max-w-xl">
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
-                className={`relative px-2 py-2 text-xs xl:text-sm font-medium transition-colors duration-200 flex items-center space-x-1 ${
+                className={`relative px-2 py-1.5 text-xs font-medium transition-colors duration-200 flex items-center space-x-1 whitespace-nowrap ${
                   isActive(item.href)
                     ? 'text-football-green'
                     : 'text-gray-300 hover:text-white'
                 }`}
               >
-                {item.icon && <item.icon className="w-3 h-3 xl:w-4 xl:h-4" />}
-                <span className="whitespace-nowrap leading-none">{item.name}</span>
+                {item.icon && <item.icon className="w-3 h-3" />}
+                <span className="leading-none">{item.name}</span>
                 {isActive(item.href) && (
                   <motion.div
                     className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-football-green to-football-blue"
@@ -100,61 +100,9 @@ const Header = () => {
             ))}
           </nav>
 
-          {/* Search Bar */}
-          <div className="hidden xl:flex items-center space-x-2">
-            <div className="relative">
-              <motion.div
-                className={`flex items-center ${
-                  isSearchOpen ? 'w-40 xl:w-48' : 'w-10'
-                } h-10 glass rounded-lg transition-all duration-300`}
-                animate={{ width: isSearchOpen ? 192 : 40 }}
-              >
-                <button
-                  onClick={() => setIsSearchOpen(!isSearchOpen)}
-                  className="flex items-center justify-center w-10 h-10 text-gray-400 hover:text-white transition-colors"
-                >
-                  <Search className="w-4 h-4" />
-                </button>
-                <AnimatePresence>
-                  {isSearchOpen && (
-                    <motion.input
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      type="text"
-                      placeholder="Search..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="flex-1 bg-transparent text-white placeholder-gray-400 outline-none px-2 text-sm"
-                      autoFocus
-                    />
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            </div>
-
-            {/* User Actions */}
-            <div className="flex items-center space-x-1 xl:space-x-2">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-2 glass rounded-lg text-gray-400 hover:text-white transition-colors"
-              >
-                <Bell className="w-4 h-4" />
-              </motion.button>
-              
-              <WalletConnect size="sm" />
-
-              <Link to="/profile">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="w-10 h-10 glass rounded-lg flex items-center justify-center text-gray-400 hover:text-white transition-colors touch-target"
-                >
-                  <User className="w-4 h-4" />
-                </motion.div>
-              </Link>
-            </div>
+          {/* User Actions */}
+          <div className="hidden lg:flex items-center space-x-1 flex-shrink-0">
+            <WalletConnect size="sm" />
           </div>
 
           {/* Mobile menu button */}
