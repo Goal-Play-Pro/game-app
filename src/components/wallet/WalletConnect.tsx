@@ -183,7 +183,7 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
 
   if (!isConnected) {
     return (
-      <div className={className}>
+      <div className={`relative ${className}`}>
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
@@ -206,15 +206,15 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
           )}
         </motion.button>
 
-        {error && (
+        {(error || isFrameBlocked) && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute top-full left-0 right-0 mt-2 p-2 bg-red-500/20 border border-red-500/30 rounded-lg z-50 max-w-xs"
+            className="absolute top-full left-0 right-0 mt-2 p-2 bg-red-500/20 border border-red-500/30 rounded-lg z-50 min-w-max"
           >
-            <div className="flex items-center space-x-2 text-red-400 text-xs">
+            <div className="flex items-center space-x-2 text-red-400 text-xs whitespace-nowrap">
               <AlertCircle className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate">{error}</span>
+              <span>{error || 'Wallet connections are disabled inside embedded frames'}</span>
             </div>
           </motion.div>
         )}
@@ -224,13 +224,13 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
 
   if (needsAuth) {
     return (
-      <div className={`space-y-2 ${className}`}>
+      <div className={`relative space-y-2 ${className}`}>
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={signInWallet}
           disabled={isAuthenticating || isFrameBlocked}
-          className={`btn-primary flex items-center justify-center space-x-2 ${sizeClasses[size]} disabled:opacity-50 disabled:cursor-not-allowed`}
+          className={`btn-primary flex items-center justify-center space-x-2 ${sizeClasses[size]} disabled:opacity-50 disabled:cursor-not-allowed w-full`}
         >
           {isAuthenticating ? (
             <>
@@ -247,21 +247,21 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
 
         <button
           onClick={disconnectWallet}
-          className={`btn-outline ${sizeClasses[size]} flex items-center justify-center space-x-2`}
+          className={`btn-outline ${sizeClasses[size]} flex items-center justify-center space-x-2 w-full`}
         >
           <LogOut className={iconSizes[size]} />
           <span>Disconnect</span>
         </button>
 
-        {error && (
+        {(error || isFrameBlocked) && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute top-full left-0 right-0 mt-2 p-2 bg-red-500/20 border border-red-500/30 rounded-lg z-50 max-w-xs"
+            className="absolute top-full left-0 right-0 mt-2 p-2 bg-red-500/20 border border-red-500/30 rounded-lg z-50 min-w-max"
           >
-            <div className="flex items-center space-x-2 text-red-400 text-xs">
+            <div className="flex items-center space-x-2 text-red-400 text-xs whitespace-nowrap">
               <AlertCircle className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate">{error}</span>
+              <span>{error || 'Wallet connections are disabled inside embedded frames'}</span>
             </div>
           </motion.div>
         )}
