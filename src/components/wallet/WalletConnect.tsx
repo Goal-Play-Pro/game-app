@@ -58,6 +58,18 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
     if (type === 'metamask') {
       return 'MetaMask';
     }
+    if (type === 'tokenpocket') {
+      return 'TokenPocket';
+    }
+    if (type === 'bitget') {
+      return 'Bitget Wallet';
+    }
+    if (type === 'binance') {
+      return 'Binance Wallet';
+    }
+    if (type === 'trust') {
+      return 'Trust Wallet';
+    }
     return 'Wallet';
   };
 
@@ -72,6 +84,18 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
     }
     if (win.safePal?.isSafePal) {
       wallets.push({ type: 'safepal', name: 'SafePal' });
+    }
+    if (win.tokenpocket?.isTokenPocket) {
+      wallets.push({ type: 'tokenpocket', name: 'TokenPocket' });
+    }
+    if (win.bitkeep?.ethereum?.isBitKeep) {
+      wallets.push({ type: 'bitget', name: 'Bitget Wallet' });
+    }
+    if (win.BinanceChain?.isBinance) {
+      wallets.push({ type: 'binance', name: 'Binance Wallet' });
+    }
+    if (win.trustwallet?.isTrust || win.trustwallet?.isTrustWallet) {
+      wallets.push({ type: 'trust', name: 'Trust Wallet' });
     }
     if (wallets.length === 0 && win.ethereum) {
       wallets.push({ type: 'metamask', name: 'MetaMask' });

@@ -68,7 +68,7 @@ const getChainType = (chainId: number): ChainType => {
 };
 
 const normalizeWalletType = (value: string | null | undefined): WalletType | null => {
-  if (value === 'metamask' || value === 'safepal') {
+  if (value === 'metamask' || value === 'safepal' || value === 'tokenpocket' || value === 'bitget' || value === 'binance' || value === 'trust') {
     return value;
   }
   return null;
@@ -105,6 +105,38 @@ const isMetaMaskProvider = (provider?: Eip1193Provider | null, info?: Eip6963Pro
   }
   const normalized = normalizeInfoString(info);
   return normalized.includes('metamask');
+};
+
+const isTokenPocketProvider = (provider?: Eip1193Provider | null, info?: Eip6963ProviderInfo) => {
+  if (provider?.isTokenPocket) {
+    return true;
+  }
+  const normalized = normalizeInfoString(info);
+  return normalized.includes('tokenpocket') || normalized.includes('tp wallet');
+};
+
+const isBitgetProvider = (provider?: Eip1193Provider | null, info?: Eip6963ProviderInfo) => {
+  if (provider?.isBitKeep) {
+    return true;
+  }
+  const normalized = normalizeInfoString(info);
+  return normalized.includes('bitget') || normalized.includes('bitkeep');
+};
+
+const isBinanceProvider = (provider?: Eip1193Provider | null, info?: Eip6963ProviderInfo) => {
+  if (provider?.isBinance) {
+    return true;
+  }
+  const normalized = normalizeInfoString(info);
+  return normalized.includes('binance');
+};
+
+const isTrustProvider = (provider?: Eip1193Provider | null, info?: Eip6963ProviderInfo) => {
+  if (provider?.isTrust || provider?.isTrustWallet) {
+    return true;
+  }
+  const normalized = normalizeInfoString(info);
+  return normalized.includes('trust');
 };
 
 export const enforceWalletRequestGuards = (method: string, state: WalletAuthSnapshot | null) => {
@@ -157,6 +189,18 @@ export const useWallet = () => {
     if (win.safePal?.request) {
       return win.safePal;
     }
+    if (win.tokenpocket?.request) {
+      return win.tokenpocket;
+    }
+    if (win.bitkeep?.ethereum?.request) {
+      return win.bitkeep.ethereum;
+    }
+    if (win.BinanceChain?.request) {
+      return win.BinanceChain;
+    }
+    if (win.trustwallet?.request) {
+      return win.trustwallet;
+    }
     if (win.ethereum) {
       return win.ethereum;
     }
@@ -183,6 +227,18 @@ export const useWallet = () => {
         if (isSafePalProvider(candidate, info)) {
           return 'safepal';
         }
+        if (isTokenPocketProvider(candidate, info)) {
+          return 'tokenpocket';
+        }
+        if (isBitgetProvider(candidate, info)) {
+          return 'bitget';
+        }
+        if (isBinanceProvider(candidate, info)) {
+          return 'binance';
+        }
+        if (isTrustProvider(candidate, info)) {
+          return 'trust';
+        }
         if (isMetaMaskProvider(candidate, info)) {
           return 'metamask';
         }
@@ -192,11 +248,27 @@ export const useWallet = () => {
         return 'safepal';
       }
 
+      if (isTokenPocketProvider(candidate, info) || win?.tokenpocket?.isTokenPocket) {
+        return 'tokenpocket';
+      }
+
+      if (isBitgetProvider(candidate, info) || win?.bitkeep?.ethereum?.isBitKeep) {
+        return 'bitget';
+      }
+
+      if (isBinanceProvider(candidate, info) || win?.BinanceChain?.isBinance) {
+        return 'binance';
+      }
+
+      if (isTrustProvider(candidate, info) || win?.trustwallet?.isTrust || win?.trustwallet?.isTrustWallet) {
+        return 'trust';
+      }
+
       if (isMetaMaskProvider(candidate, info) || win?.ethereum?.isMetaMask) {
         return 'metamask';
       }
 
-      if (candidate || win?.ethereum || win?.safePal) {
+      if (candidate || win?.ethereum || win?.safePal || win?.tokenpocket || win?.bitkeep || win?.BinanceChain || win?.trustwallet) {
         return 'metamask';
       }
 
@@ -325,9 +397,17 @@ export const useWallet = () => {
 
     if (!provider) {
       if (detectedType === 'unknown') {
-        setError('No compatible wallet detected. Please install MetaMask or SafePal to continue.');
+        setError('No compatible wallet detected. Please install a Web3 wallet (MetaMask, SafePal, TokenPocket, Bitget, Binance, or Trust Wallet).');
       } else {
-        const name = detectedType === 'safepal' ? 'SafePal' : 'MetaMask';
+        const walletNames: { [key: string]: string } = {
+          'safepal': 'SafePal',
+          'metamask': 'MetaMask',
+          'tokenpocket': 'TokenPocket',
+          'bitget': 'Bitget Wallet',
+          'binance': 'Binance Wallet',
+          'trust': 'Trust Wallet'
+        };
+        const name = walletNames[detectedType] || 'Wallet';
         setError(`${name} is not available. Please reopen or reinstall the extension.`);
       }
       return;

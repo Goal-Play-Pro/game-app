@@ -1,4 +1,4 @@
-export type WalletType = 'metamask' | 'safepal' | 'unknown';
+export type WalletType = 'metamask' | 'safepal' | 'tokenpocket' | 'bitget' | 'binance' | 'trust' | 'unknown';
 
 export interface Eip1193RequestArguments {
   readonly method: string;
@@ -13,6 +13,11 @@ export interface Eip1193Provider {
   request: (args: Eip1193RequestArguments) => Promise<unknown>;
   isMetaMask?: boolean;
   isSafePal?: boolean;
+  isTokenPocket?: boolean;
+  isBitKeep?: boolean;
+  isBinance?: boolean;
+  isTrust?: boolean;
+  isTrustWallet?: boolean;
   on?: <T extends keyof Eip1193EventMap>(event: T, handler: Eip1193EventMap[T]) => void;
   removeListener?: <T extends keyof Eip1193EventMap>(event: T, handler: Eip1193EventMap[T]) => void;
   isConnected?: () => boolean;
@@ -58,6 +63,12 @@ export interface Eip6963AnnounceProviderEvent extends Event {
 export interface WalletWindow extends Window {
   ethereum?: Eip1193Provider;
   safePal?: Eip1193Provider;
+  tokenpocket?: Eip1193Provider;
+  bitkeep?: {
+    ethereum?: Eip1193Provider;
+  };
+  BinanceChain?: Eip1193Provider;
+  trustwallet?: Eip1193Provider;
 }
 
 export const setWindowProvider = <K extends keyof WalletWindow>(key: K, value: WalletWindow[K]) => {
