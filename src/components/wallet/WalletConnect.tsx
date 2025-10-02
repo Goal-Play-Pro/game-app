@@ -206,15 +206,38 @@ const WalletConnect = ({ size = 'md', showDropdown = true, className = '' }: Wal
   }, [chainId, error, handleSwitchToBSC, isConnected, isSwitchingNetwork, switchErrorMessage]);
 
   if (!isConnected) {
+    const handleConnectClick = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('🔵 Connect button clicked', { isFrameBlocked, isConnecting, error });
+
+      if (isFrameBlocked) {
+        console.log('🔴 Cannot connect: blocked by iframe');
+        return;
+      }
+
+      if (isConnecting) {
+        console.log('🔴 Cannot connect: already connecting');
+        return;
+      }
+
+      console.log('🔵 Calling connectWallet...');
+      connectWallet();
+    };
+
+    // Only disable button when actually connecting, not for iframe
+    const isButtonDisabled = isConnecting;
+
     return (
       <div className={`relative ${className}`}>
         <motion.button
-          whileHover={{ scale: isFrameBlocked ? 1 : 1.02 }}
-          whileTap={{ scale: isFrameBlocked ? 1 : 0.98 }}
-          onClick={isFrameBlocked ? undefined : connectWallet}
-          disabled={isConnecting || isFrameBlocked}
+          type="button"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={handleConnectClick}
+          disabled={isButtonDisabled}
           className={`btn-primary flex items-center space-x-2 ${sizeClasses[size]} ${
-            isFrameBlocked ? 'opacity-50 cursor-not-allowed' : isConnecting ? 'opacity-70' : ''
+            isButtonDisabled ? 'opacity-70 cursor-wait' : isFrameBlocked ? 'opacity-60' : ''
           }`}
         >
           {isConnecting ? (

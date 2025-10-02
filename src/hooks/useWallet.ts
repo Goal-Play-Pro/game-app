@@ -382,12 +382,20 @@ export const useWallet = () => {
   }, []);
 
   const connectWallet = useCallback(async () => {
+    console.log('🟢 connectWallet called', {
+      isFrameBlocked: walletState.isFrameBlocked,
+      isConnecting: walletState.isConnecting,
+      isConnectingRef: isConnectingRef.current
+    });
+
     if (walletState.isFrameBlocked) {
+      console.log('🔴 Blocked: iframe detected');
       setError('Wallet connections are disabled inside embedded frames.');
       return;
     }
 
     if (walletState.isConnecting || isConnectingRef.current) {
+      console.log('🔴 Blocked: already connecting');
       return;
     }
 
@@ -395,8 +403,11 @@ export const useWallet = () => {
     setError(null);
 
     const provider = getProvider();
+    console.log('🟡 Provider found:', !!provider);
+
     const detectedType = provider ? deriveWalletType(provider) : detectWalletType();
     const normalizedType = detectedType === 'unknown' ? null : detectedType;
+    console.log('🟡 Wallet type detected:', detectedType);
 
     if (!provider) {
       if (detectedType === 'unknown') {
