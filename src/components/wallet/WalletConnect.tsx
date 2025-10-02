@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, AlertCircle, Shield } from 'lucide-react';
+import { Wallet, ChevronDown, ExternalLink, Copy, LogOut, CircleAlert as AlertCircle, Shield } from 'lucide-react';
 import { useWallet } from '../../hooks/useWallet';
 
 interface WalletConnectProps {
