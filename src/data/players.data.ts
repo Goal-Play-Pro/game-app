@@ -71,9 +71,11 @@ export class RealPlayersService {
     const targetDivision = divisionMap[division.toLowerCase()] || division;
     return REAL_PLAYERS_DATA.filter(player => player.divisions.includes(targetDivision));
   }
+
   static getPlayerById(id: string): PlayerData | undefined {
     return REAL_PLAYERS_DATA.find(player => player.id === id);
   }
+
   static getAllPlayers(): PlayerData[] {
     return REAL_PLAYERS_DATA;
   }
